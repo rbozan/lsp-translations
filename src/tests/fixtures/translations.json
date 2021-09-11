@@ -1,0 +1,13 @@
+{
+    "main": {
+        "header": {
+            "title": "This title will appear in the header."
+        },
+        "content": {
+            "heading": {
+                "title": "A regular header for my content",
+                "body": "This is the body of my website."
+            }
+        }
+    }
+}

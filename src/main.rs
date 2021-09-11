@@ -2,7 +2,6 @@
 mod tests;
 
 use serde_json::Value;
-use tokio::net::TcpListener;
 use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::*;
 use tower_lsp::{Client, LanguageServer, LspService, Server};
@@ -15,22 +14,23 @@ pub struct Backend {
 #[tower_lsp::async_trait]
 impl LanguageServer for Backend {
     async fn initialize(&self, _: InitializeParams) -> Result<InitializeResult> {
+        self.client
+            .log_message(MessageType::Info, "initializing.....!")
+            .await;
+
         Ok(InitializeResult {
             server_info: None,
             capabilities: ServerCapabilities {
                 text_document_sync: Some(TextDocumentSyncCapability::Kind(
                     TextDocumentSyncKind::Incremental,
                 )),
+                hover_provider: Some(HoverProviderCapability::Simple(true)),
                 completion_provider: Some(CompletionOptions {
-                    resolve_provider: Some(false),
+                    resolve_provider: Some(true),
                     trigger_characters: None,
                     // trigger_characters: Some(vec!["'".to_string(), "\"".to_string()]),
                     work_done_progress_options: Default::default(),
                     all_commit_characters: None,
-                }),
-                execute_command_provider: Some(ExecuteCommandOptions {
-                    commands: vec!["dummy.do_something".to_string()],
-                    work_done_progress_options: Default::default(),
                 }),
                 workspace: Some(WorkspaceServerCapabilities {
                     workspace_folders: Some(WorkspaceFoldersServerCapabilities {
@@ -111,19 +111,29 @@ impl LanguageServer for Backend {
     }
 
     async fn completion(&self, _: CompletionParams) -> Result<Option<CompletionResponse>> {
+        self.client
+            .log_message(MessageType::Info, "Completion!")
+            .await;
+
         Ok(Some(CompletionResponse::Array(vec![
             CompletionItem::new_simple("Hello".to_string(), "Some detail".to_string()),
             CompletionItem::new_simple("Bye".to_string(), "More detail".to_string()),
         ])))
     }
+
+    async fn hover(&self, _: HoverParams) -> Result<Option<Hover>> {
+        self.client.log_message(MessageType::Info, "hoverrr").await;
+
+        Ok(Some(Hover {
+            contents: HoverContents::Scalar(MarkedString::String("TODO: Hier komt hover informatie over translation".to_string())),
+            range: None,
+        }))
+    }
 }
 
 #[tokio::main]
 async fn main() {
-    // env_logger::init();
-    println!("started lang server");
-
-    let stdin = tokio::io::stdin();
+        let stdin = tokio::io::stdin();
     let stdout = tokio::io::stdout();
 
     let (service, messages) = LspService::new(|client| Backend { client });
@@ -131,14 +141,4 @@ async fn main() {
         .interleave(messages)
         .serve(service)
         .await;
-
-    /* let listener = TcpListener::bind("127.0.0.1:9257").await.unwrap();
-    let (stream, _) = listener.accept().await.unwrap();
-    let (read, write) = tokio::io::split(stream);
-
-    let (service, messages) = LspService::new(|client| Backend { client });
-    Server::new(read, write)
-        .interleave(messages)
-        .serve(service)
-        .await; */
 }
