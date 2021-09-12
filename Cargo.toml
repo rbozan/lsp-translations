@@ -10,6 +10,8 @@ tower-lsp = "0.14.1"
 tokio = { version = "1.11.0", features = ["macros", "rt-multi-thread", "io-util", "io-std"] }
 serde = "1.0.130"
 serde_json = "1.0.67"
+regex = "1.5.4"
+itertools = "0.10.1"
 merge = "0.1.0"
 derive-new = "0.5"
 glob = "0.3.0"

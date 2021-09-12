@@ -18,18 +18,20 @@ use std::sync::{Arc, Mutex};
 #[macro_use]
 extern crate derive_new;
 
-#[derive(Deserialize, Debug)]
+use regex::Regex;
+
+#[derive(Deserialize, Debug, Default)]
 struct FileNameConfig {
     details: String,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Default)]
 struct KeyConfig {
     details: String,
     filter: String,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Default)]
 #[serde(rename_all = "camelCase")]
 struct ExtensionConfig {
     translation_files: Vec<String>,
@@ -42,18 +44,17 @@ pub struct Backend {
     client: Client,
     #[new(value = "Arc::new(Mutex::new(Cell::new(vec![])))")]
     definitions: Arc<Mutex<Cell<Vec<Definition>>>>,
+    #[new(value = "Arc::new(Mutex::new(Cell::new(ExtensionConfig::default())))")]
+    config: Arc<Mutex<Cell<ExtensionConfig>>>,
 }
+
+use itertools::Itertools;
 
 impl Backend {
     async fn fetch_translations(&self, config_value: Value) {
         let config: ExtensionConfig = serde_json::from_value(config_value).unwrap();
 
-        self.client
-            .log_message(
-                MessageType::Info,
-                format!("read translations: {:?}", config),
-            )
-            .await;
+        self.config.lock().unwrap().set(config);
 
         let folders = self.client.workspace_folders().await.unwrap().unwrap();
 
@@ -64,7 +65,11 @@ impl Backend {
         let files: Vec<PathBuf> = folders
             .iter()
             .map(|folder| {
-                config
+                self.config
+                    .lock()
+                    .unwrap()
+                    // TODO: Remove mut here
+                    .get_mut()
                     .translation_files
                     .iter()
                     .filter_map(|glob_pattern_setting| {
@@ -105,12 +110,9 @@ impl Backend {
         let mut definitions = self.definitions.lock().unwrap();
         definitions.get_mut().clear();
 
-        // self.parse_translation_structure(&value);
-
         definitions.set(self.parse_translation_structure(&value, "".to_string()));
 
         Ok(())
-        // Ok(self.definitions)
     }
 
     fn parse_translation_structure(&self, value: &Value, json_path: String) -> Vec<Definition> {
@@ -131,11 +133,28 @@ impl Backend {
                     ),
                 ));
             }),
-            Value::String(value) => definitions.push(Definition {
-                key: json_path,
-                value: value.to_string(),
-                ..Default::default()
-            }),
+            Value::String(value) => {
+                // TODO: Move regex away from here
+                let key_filter_regex =
+                    Regex::new(&self.config.lock().unwrap().get_mut().key.filter).unwrap();
+                let key_details_regex =
+                    Regex::new(&self.config.lock().unwrap().get_mut().key.details).unwrap();
+
+                // key_filter_regex.captures_iter(&json_path).intersperse(".").collect();
+                // TODO: Fix this
+                let cleaned_key: Option<String> =
+                    key_filter_regex.captures(&json_path).and_then(|cap| {
+                        cap.get(0)
+                            .and_then(|group| Some(group.as_str().to_string()))
+                    });
+
+                definitions.push(Definition {
+                    key: json_path,
+                    cleaned_key,
+                    value: value.to_string(),
+                    ..Default::default()
+                })
+            }
             _ => println!("TODO: Error, translation file is not an array"),
         }
 
@@ -201,8 +220,8 @@ impl LanguageServer for Backend {
                     .log_message(
                         MessageType::Info,
                         format!(
-                            "definitions {:?}",
-                            self.definitions.lock().unwrap().get_mut()
+                            "Loaded {:} definitions",
+                            self.definitions.lock().unwrap().get_mut().len()
                         ),
                     )
                     .await;
