@@ -18,6 +18,9 @@ use std::sync::{Arc, Mutex};
 #[macro_use]
 extern crate derive_new;
 
+#[macro_use]
+extern crate ntest;
+
 use regex::Regex;
 
 #[derive(Deserialize, Debug, Default)]
@@ -165,10 +168,6 @@ impl Backend {
 #[tower_lsp::async_trait]
 impl LanguageServer for Backend {
     async fn initialize(&self, _: InitializeParams) -> jsonrpc::Result<InitializeResult> {
-        self.client
-            .log_message(MessageType::Info, "initializing.....!")
-            .await;
-
         Ok(InitializeResult {
             server_info: None,
             capabilities: ServerCapabilities {
@@ -196,10 +195,6 @@ impl LanguageServer for Backend {
     }
 
     async fn initialized(&self, _: InitializedParams) {
-        self.client
-            .log_message(MessageType::Info, "initialized!")
-            .await;
-
         // Read configuration
         let config = self
             .client
