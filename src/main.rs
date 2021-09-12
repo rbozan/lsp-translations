@@ -9,7 +9,11 @@ use tower_lsp::{Client, LanguageServer, LspService, Server};
 use glob::glob;
 use serde::Deserialize;
 use std::borrow::BorrowMut;
+use std::cell::Cell;
+use std::fs::File;
+use std::io::BufReader;
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
 
 #[macro_use]
 extern crate derive_new;
@@ -33,11 +37,11 @@ struct ExtensionConfig {
     key: KeyConfig,
 }
 
-#[derive(Debug, new)]
+#[derive(new)]
 pub struct Backend {
     client: Client,
-    #[new(value = "vec![]")]
-    definitions: Vec<Definition>,
+    #[new(value = "Arc::new(Mutex::new(Cell::new(vec![])))")]
+    definitions: Arc<Mutex<Cell<Vec<Definition>>>>,
 }
 
 impl Backend {
@@ -53,53 +57,95 @@ impl Backend {
 
         let folders = self.client.workspace_folders().await.unwrap().unwrap();
 
-                self.client
+        self.client
             .log_message(MessageType::Info, format!("folders: {:?}", folders))
             .await;
 
-        let files :Vec<PathBuf> = folders
+        let files: Vec<PathBuf> = folders
             .iter()
             .map(|folder| {
                 config
                     .translation_files
                     .iter()
                     .filter_map(|glob_pattern_setting| {
-                        match Path::new(&folder.uri.path()).join(glob_pattern_setting).to_str() {
+                        match Path::new(&folder.uri.path())
+                            .join(glob_pattern_setting)
+                            .to_str()
+                        {
                             Some(glob_pattern) => match glob(glob_pattern) {
                                 Ok(paths) => paths
                                     .map(|path| match path {
                                         Ok(path) => Some(path),
-                                        Err(_) => {
-                                            None
-                                        }
+                                        Err(_) => None,
                                     })
                                     .collect::<Option<PathBuf>>(),
-                                Err(_) => {
-                                    None
-                                }
+                                Err(_) => None,
                             },
                             None => None,
                         }
-                    }).collect::<PathBuf>()
+                    })
+                    .collect::<PathBuf>()
             })
             .collect();
 
         self.client
             .log_message(MessageType::Info, format!("path bufs: {:?}", files))
             .await;
+
+        self.read_translation(&files[0]).await;
     }
 
-    async fn read_translation() {
+    async fn read_translation(&self, path: &PathBuf) -> Result<(), Box<dyn std::error::Error>> {
+        let file = File::open(path)?;
+        let reader = BufReader::new(file);
 
+        // Read the JSON contents of the file as an instance of `User`.
+        let value: Value = serde_json::from_reader(reader)?;
+
+        let mut definitions = self.definitions.lock().unwrap();
+        definitions.get_mut().clear();
+
+        // self.parse_translation_structure(&value);
+
+        definitions.set(self.parse_translation_structure(&value, "".to_string()));
+
+        Ok(())
+        // Ok(self.definitions)
+    }
+
+    fn parse_translation_structure(&self, value: &Value, json_path: String) -> Vec<Definition> {
+        let mut definitions = vec![];
+
+        match value {
+            /* Value::Array(values) => values.iter().for_each(|value| {
+                definitions.append(&mut self.parse_translation_structure(value));
+            }), */
+            Value::Object(values) => values.iter().for_each(|(key, value)| {
+                definitions.append(&mut self.parse_translation_structure(
+                    value,
+                    format!(
+                        "{}{}{}",
+                        json_path,
+                        if !json_path.is_empty() { "." } else { "" },
+                        key
+                    ),
+                ));
+            }),
+            Value::String(value) => definitions.push(Definition {
+                key: json_path,
+                value: value.to_string(),
+                ..Default::default()
+            }),
+            _ => println!("TODO: Error, translation file is not an array"),
+        }
+
+        definitions
     }
 }
 
 #[tower_lsp::async_trait]
 impl LanguageServer for Backend {
-    async fn initialize(
-        &self,
-        initialize_params: InitializeParams,
-    ) -> jsonrpc::Result<InitializeResult> {
+    async fn initialize(&self, _: InitializeParams) -> jsonrpc::Result<InitializeResult> {
         self.client
             .log_message(MessageType::Info, "initializing.....!")
             .await;
@@ -151,6 +197,15 @@ impl LanguageServer for Backend {
                     .log_message(MessageType::Log, format!("config received {:?}", config))
                     .await;
                 self.fetch_translations(config[0].clone()).await;
+                self.client
+                    .log_message(
+                        MessageType::Info,
+                        format!(
+                            "definitions {:?}",
+                            self.definitions.lock().unwrap().get_mut()
+                        ),
+                    )
+                    .await;
             }
             Err(err) => self.client.log_message(MessageType::Error, err).await,
         }
@@ -221,10 +276,26 @@ impl LanguageServer for Backend {
             .log_message(MessageType::Info, "Completion!")
             .await;
 
-        Ok(Some(CompletionResponse::Array(vec![
+        Ok(Some(CompletionResponse::Array(
+            self.definitions
+                .lock()
+                .unwrap()
+                .get_mut()
+                .iter()
+                .map(|definition| CompletionItem {
+                    label: definition.key.clone(),
+                    kind: Some(CompletionItemKind::Text),
+                    detail: Some(format!("definition: {:#?}", definition)),
+                    // documentation
+                    ..Default::default()
+                })
+                .collect(),
+        )))
+
+        /* Ok(Some(CompletionResponse::Array(vec![
             CompletionItem::new_simple("Hello".to_string(), "Some detail".to_string()),
             CompletionItem::new_simple("Bye".to_string(), "More detail".to_string()),
-        ])))
+        ]))) */
     }
 
     async fn hover(&self, _: HoverParams) -> jsonrpc::Result<Option<Hover>> {
