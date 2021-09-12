@@ -2,18 +2,104 @@
 mod tests;
 
 use serde_json::Value;
-use tower_lsp::jsonrpc::Result;
+use tower_lsp::jsonrpc;
 use tower_lsp::lsp_types::*;
 use tower_lsp::{Client, LanguageServer, LspService, Server};
 
-#[derive(Debug)]
+use glob::glob;
+use serde::Deserialize;
+use std::borrow::BorrowMut;
+use std::path::{Path, PathBuf};
+
+#[macro_use]
+extern crate derive_new;
+
+#[derive(Deserialize, Debug)]
+struct FileNameConfig {
+    details: String,
+}
+
+#[derive(Deserialize, Debug)]
+struct KeyConfig {
+    details: String,
+    filter: String,
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+struct ExtensionConfig {
+    translation_files: Vec<String>,
+    file_name: FileNameConfig,
+    key: KeyConfig,
+}
+
+#[derive(Debug, new)]
 pub struct Backend {
     client: Client,
+    #[new(value = "vec![]")]
+    definitions: Vec<Definition>,
+}
+
+impl Backend {
+    async fn fetch_translations(&self, config_value: Value) {
+        let config: ExtensionConfig = serde_json::from_value(config_value).unwrap();
+
+        self.client
+            .log_message(
+                MessageType::Info,
+                format!("read translations: {:?}", config),
+            )
+            .await;
+
+        let folders = self.client.workspace_folders().await.unwrap().unwrap();
+
+                self.client
+            .log_message(MessageType::Info, format!("folders: {:?}", folders))
+            .await;
+
+        let files :Vec<PathBuf> = folders
+            .iter()
+            .map(|folder| {
+                config
+                    .translation_files
+                    .iter()
+                    .filter_map(|glob_pattern_setting| {
+                        match Path::new(&folder.uri.path()).join(glob_pattern_setting).to_str() {
+                            Some(glob_pattern) => match glob(glob_pattern) {
+                                Ok(paths) => paths
+                                    .map(|path| match path {
+                                        Ok(path) => Some(path),
+                                        Err(_) => {
+                                            None
+                                        }
+                                    })
+                                    .collect::<Option<PathBuf>>(),
+                                Err(_) => {
+                                    None
+                                }
+                            },
+                            None => None,
+                        }
+                    }).collect::<PathBuf>()
+            })
+            .collect();
+
+        self.client
+            .log_message(MessageType::Info, format!("path bufs: {:?}", files))
+            .await;
+    }
+
+    async fn read_translation() {
+
+    }
 }
 
 #[tower_lsp::async_trait]
 impl LanguageServer for Backend {
-    async fn initialize(&self, _: InitializeParams) -> Result<InitializeResult> {
+    async fn initialize(
+        &self,
+        initialize_params: InitializeParams,
+    ) -> jsonrpc::Result<InitializeResult> {
         self.client
             .log_message(MessageType::Info, "initializing.....!")
             .await;
@@ -22,7 +108,7 @@ impl LanguageServer for Backend {
             server_info: None,
             capabilities: ServerCapabilities {
                 text_document_sync: Some(TextDocumentSyncCapability::Kind(
-                    TextDocumentSyncKind::Incremental,
+                    TextDocumentSyncKind::Full,
                 )),
                 hover_provider: Some(HoverProviderCapability::Simple(true)),
                 completion_provider: Some(CompletionOptions {
@@ -48,9 +134,29 @@ impl LanguageServer for Backend {
         self.client
             .log_message(MessageType::Info, "initialized!")
             .await;
+
+        // Read configuration
+        let config = self
+            .client
+            .configuration(vec![ConfigurationItem {
+                scope_uri: None,
+                // section: Some("lsp-translations.translationFiles".to_string()),
+                section: Some("lsp-translations".to_string()),
+            }])
+            .await;
+
+        match config {
+            Ok(config) => {
+                self.client
+                    .log_message(MessageType::Log, format!("config received {:?}", config))
+                    .await;
+                self.fetch_translations(config[0].clone()).await;
+            }
+            Err(err) => self.client.log_message(MessageType::Error, err).await,
+        }
     }
 
-    async fn shutdown(&self) -> Result<()> {
+    async fn shutdown(&self) -> jsonrpc::Result<()> {
         Ok(())
     }
 
@@ -72,7 +178,7 @@ impl LanguageServer for Backend {
             .await;
     }
 
-    async fn execute_command(&self, _: ExecuteCommandParams) -> Result<Option<Value>> {
+    async fn execute_command(&self, _: ExecuteCommandParams) -> jsonrpc::Result<Option<Value>> {
         self.client
             .log_message(MessageType::Info, "command executed!")
             .await;
@@ -110,7 +216,7 @@ impl LanguageServer for Backend {
             .await;
     }
 
-    async fn completion(&self, _: CompletionParams) -> Result<Option<CompletionResponse>> {
+    async fn completion(&self, _: CompletionParams) -> jsonrpc::Result<Option<CompletionResponse>> {
         self.client
             .log_message(MessageType::Info, "Completion!")
             .await;
@@ -121,11 +227,13 @@ impl LanguageServer for Backend {
         ])))
     }
 
-    async fn hover(&self, _: HoverParams) -> Result<Option<Hover>> {
+    async fn hover(&self, _: HoverParams) -> jsonrpc::Result<Option<Hover>> {
         self.client.log_message(MessageType::Info, "hoverrr").await;
 
         Ok(Some(Hover {
-            contents: HoverContents::Scalar(MarkedString::String("TODO: Hier komt hover informatie over translation".to_string())),
+            contents: HoverContents::Scalar(MarkedString::String(
+                "TODO: Hier komt hover informatie over translation".to_string(),
+            )),
             range: None,
         }))
     }
@@ -133,12 +241,25 @@ impl LanguageServer for Backend {
 
 #[tokio::main]
 async fn main() {
-        let stdin = tokio::io::stdin();
+    let stdin = tokio::io::stdin();
     let stdout = tokio::io::stdout();
 
-    let (service, messages) = LspService::new(|client| Backend { client });
+    let (service, messages) = LspService::new(|client| Backend::new(client));
     Server::new(stdin, stdout)
         .interleave(messages)
         .serve(service)
         .await;
+}
+
+use merge::Merge;
+#[derive(Merge, Default, Debug)]
+struct Definition {
+    #[merge(skip)]
+    key: String,
+    cleaned_key: Option<String>,
+    #[merge(skip)]
+    file: String,
+    language: Option<String>,
+    #[merge(skip)]
+    value: String,
 }

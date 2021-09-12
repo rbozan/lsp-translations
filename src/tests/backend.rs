@@ -17,7 +17,7 @@ mod tests {
     const EXIT_NOTIF: &str = r#"{"jsonrpc":"2.0","method":"exit"}"#;
 
     fn init_service() -> Spawn<LspService> {
-        let (service, _) = LspService::new(|client| Backend { client });
+        let (service, _) = LspService::new(|client| Backend::new(client));
         Spawn::new(service)
     }
 
