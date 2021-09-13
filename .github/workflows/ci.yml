@@ -3,7 +3,7 @@ on: [push]
 name: CI
 
 jobs:
-  build_and_test:
+  test:
     name: Rust project
     runs-on: ubuntu-latest
     steps:
@@ -11,11 +11,32 @@ jobs:
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
+
       - uses: actions-rs/cargo@v1
         with:
           command: test
-          # args: --release --all-features
+
+
+  build:
+    name: Build
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+        - build: linux
+          os: ubuntu-latest
+          rust: stable
+        - build: macos
+          os: macos-latest
+          rust: stable
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+
       - uses: actions-rs/cargo@v1
         with:
           command: build
-          args: --release --all-features
+          args: --release --target=${{ matrix.target }}
+          use-cross: true

@@ -8,7 +8,6 @@ use tower_lsp::{Client, LanguageServer, LspService, Server};
 
 use glob::glob;
 use serde::Deserialize;
-use std::borrow::BorrowMut;
 use std::cell::Cell;
 use std::fs::File;
 use std::io::BufReader;
@@ -18,8 +17,13 @@ use std::sync::{Arc, Mutex};
 #[macro_use]
 extern crate derive_new;
 
+#[cfg(test)]
 #[macro_use]
 extern crate ntest;
+
+#[cfg(test)]
+#[macro_use]
+extern crate lazy_static;
 
 use regex::Regex;
 
@@ -50,8 +54,6 @@ pub struct Backend {
     #[new(value = "Arc::new(Mutex::new(Cell::new(ExtensionConfig::default())))")]
     config: Arc<Mutex<Cell<ExtensionConfig>>>,
 }
-
-use itertools::Itertools;
 
 impl Backend {
     async fn fetch_translations(&self, config_value: Value) {
