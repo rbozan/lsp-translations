@@ -13,8 +13,10 @@ mod tests {
 
     use core::task::Poll;
 
+    use futures::future::select_all;
     use futures::join;
     use futures::{future, FutureExt, StreamExt};
+    use std::pin::Pin;
 
     // use core::stream::Stream;
 
@@ -43,6 +45,20 @@ mod tests {
         }
     }
 ], "id": 0 }"#
+        )
+        .unwrap();
+        static ref WORKSPACE_WORKSPACE_FOLDERS_REQUEST: Incoming = serde_json::from_str(
+            r#"
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "result": [
+                    {
+                        "uri": "file:///home/rbozan/Projects/recharge-mobile-app",
+                        "name": "recharge-mobile-app"
+                    }
+                ]
+            }"#
         )
         .unwrap();
     }
@@ -84,7 +100,7 @@ mod tests {
     }
 
     #[tokio::test]
-    #[timeout(2000)]
+    #[timeout(60000)]
     async fn send_configuration() {
         let (mut service, mut messages) = init_service();
 
@@ -94,15 +110,20 @@ mod tests {
         let shutdown: Incoming = serde_json::from_str(INITIALIZED_REQUEST).unwrap();
 
         assert_eq!(service.poll_ready(), Poll::Ready(Ok(())));
-        //
-        join!(
-            service.call(shutdown.clone()),
-            handle_lsp_message(
+
+        let futures : Vec<Pin<Box<dyn futures::Future<Output = ()>>>> = vec![
+            Box::pin(service.call(shutdown.clone())),
+            Box::pin(handle_lsp_message(
                 service,
                 &mut messages,
-                vec![&*WORKSPACE_CONFIGURATION_REQUEST]
-            ),
-        );
+                vec![
+                    &*WORKSPACE_CONFIGURATION_REQUEST,
+                    &*WORKSPACE_WORKSPACE_FOLDERS_REQUEST,
+                ],
+            )),
+        ];
+
+        select_all(futures).await;
         println!("test we xijn hier!!!!");
 
         println!("done4");
@@ -112,24 +133,34 @@ mod tests {
         mut service: Spawn<LspService>,
         messages: &mut MessageStream,
         responses: Vec<&Incoming>,
-    ) -> String {
+    ) {
+        let mut i = 0;
         while let Some(message) = messages.next().await {
-            println!("msg {:?}", message);
-
             match message {
                 Outgoing::Response(_) => todo!(),
                 Outgoing::Request(req) => {
-                    let value = serde_json::to_value(req).unwrap();
+                    let value = serde_json::to_value(req.clone()).unwrap();
                     if value["method"] == "window/logMessage" {
-                        println!("Received a window/logMessage, ignoring.");
-                        continue;
+                        println!(
+                            "[window/logMessage] {:?}",
+                            value["params"]["message"].as_str().unwrap()
+                        );
+                        if i == 2 {
+                            println!("done");
+                            break;
+                        };
+                    } else {
+                        println!("msg {:?}", &req);
+
+                        let result = service.call(responses[i].clone()).await;
+                        println!("result of call {:?}", result);
+                        i = i + 1;
                     }
                 }
             }
 
-            let result = service.call(responses[0].clone()).await;
-            println!("result of call {:?}", result);
+            // if i >= responses.len() { break; }
         }
-        return "finished".to_string();
+        ()
     }
 }
