@@ -13,10 +13,13 @@ mod tests {
 
     use core::task::Poll;
 
+    use std::env;
+    use std::path::Path;
+
     use futures::future::select_all;
     use futures::join;
+    use futures::select;
     use futures::{future, FutureExt, StreamExt};
-    use std::pin::Pin;
 
     // use core::stream::Stream;
 
@@ -31,7 +34,7 @@ mod tests {
             r#"{"jsonrpc":"2.0","result": [
     {
         "translationFiles": [
-            "./backend/cache/translations.json"
+            "./fixtures/*.json"
         ],
         "fileName": {
             "details": "testdsddasdasdddsad"
@@ -48,17 +51,26 @@ mod tests {
         )
         .unwrap();
         static ref WORKSPACE_WORKSPACE_FOLDERS_REQUEST: Incoming = serde_json::from_str(
-            r#"
-            {
+            format!(
+                r#"
+            {{
                 "jsonrpc": "2.0",
                 "id": 1,
                 "result": [
-                    {
-                        "uri": "file:///home/rbozan/Projects/recharge-mobile-app",
+                    {{
+                        "uri": "file://{}",
                         "name": "recharge-mobile-app"
-                    }
+                    }}
                 ]
-            }"#
+            }}"#,
+                env::current_dir()
+                    .unwrap()
+                    .join("src")
+                    .join("tests")
+                    .to_str()
+                    .unwrap()
+            )
+            .as_str()
         )
         .unwrap();
     }
@@ -111,22 +123,26 @@ mod tests {
 
         assert_eq!(service.poll_ready(), Poll::Ready(Ok(())));
 
-        let futures : Vec<Pin<Box<dyn futures::Future<Output = ()>>>> = vec![
-            Box::pin(service.call(shutdown.clone())),
-            Box::pin(handle_lsp_message(
+        select!(
+            req = service.call(shutdown.clone()).fuse() => {
+                assert_eq!(req.unwrap(), None);
+            },
+            () = handle_lsp_message(
                 service,
                 &mut messages,
                 vec![
                     &*WORKSPACE_CONFIGURATION_REQUEST,
                     &*WORKSPACE_WORKSPACE_FOLDERS_REQUEST,
                 ],
-            )),
-        ];
+            ).fuse() => {
+                panic!("lsp messages should not finish faster than finishing request")
+            },
+        );
 
-        select_all(futures).await;
-        println!("test we xijn hier!!!!");
+        let message = (messages.next().await).unwrap();
+        let value = serde_json::to_value(message).unwrap();
 
-        println!("done4");
+        assert_eq!(value["params"]["message"], "Loaded 3 definitions");
     }
 
     async fn handle_lsp_message(
@@ -145,15 +161,11 @@ mod tests {
                             "[window/logMessage] {:?}",
                             value["params"]["message"].as_str().unwrap()
                         );
-                        if i == 2 {
-                            println!("done");
-                            break;
-                        };
                     } else {
-                        println!("msg {:?}", &req);
+                        println!("[msg request] {:?}", &req);
 
                         let result = service.call(responses[i].clone()).await;
-                        println!("result of call {:?}", result);
+                        println!("[msg response] {:?}", result);
                         i = i + 1;
                     }
                 }

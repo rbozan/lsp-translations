@@ -103,11 +103,9 @@ impl Backend {
             .await;
 
         self.read_translation(&files[0]).await;
-        println!("klaar ");
     }
 
     async fn read_translation(&self, path: &PathBuf) -> Result<(), Box<dyn std::error::Error>> {
-        println!("1");
         let file = File::open(path)?;
         let reader = BufReader::new(file);
 
@@ -117,11 +115,7 @@ impl Backend {
         let mut definitions = self.definitions.lock().unwrap();
         definitions.get_mut().clear();
 
-                println!("2");
-
-
         definitions.set(self.parse_translation_structure(&value, "".to_string()));
-        println!("3");
 
         Ok(())
     }
