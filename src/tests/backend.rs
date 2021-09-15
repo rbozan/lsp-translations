@@ -58,7 +58,7 @@ mod tests {
                 "id": 1,
                 "result": [
                     {{
-                        "uri": "file://{}",
+                        "uri": "file://{:}",
                         "name": "recharge-mobile-app"
                     }}
                 ]
@@ -69,6 +69,8 @@ mod tests {
                     .join("tests")
                     .to_str()
                     .unwrap()
+                    .escape_default()
+                    .to_string()
             )
             .as_str()
         )
