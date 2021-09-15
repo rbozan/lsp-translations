@@ -4,7 +4,7 @@ name: CI
 
 jobs:
   test:
-    name: Rust project
+    name: Test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
@@ -16,27 +16,29 @@ jobs:
         with:
           command: test
 
-
   build:
     name: Build
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
     strategy:
       matrix:
-        include:
-        - build: linux
-          os: ubuntu-latest
-          rust: stable
-        - build: macos
-          os: macos-latest
-          rust: stable
+        target: [ aarch64-unknown-linux-gnu, armv7-unknown-linux-gnueabihf, i686-unknown-linux-gnu, i686-unknown-linux-musl, mips-unknown-linux-gnu, mips64-unknown-linux-gnuabi64, mips64el-unknown-linux-gnuabi64, mipsel-unknown-linux-gnu, powerpc-unknown-linux-gnu, powerpc64-unknown-linux-gnu, powerpc64le-unknown-linux-gnu,           arm-unknown-linux-gnueabi          ,x86_64-unknown-linux-gnu           ,x86_64-unknown-linux-musl]
     steps:
       - uses: actions/checkout@v2
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
-
+          profile: minimal
+          override: true
+          target: ${{ matrix.target }}
       - uses: actions-rs/cargo@v1
         with:
           command: build
           args: --release --target=${{ matrix.target }}
           use-cross: true
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v2
+        with:
+          name: Target ${{ matrix.target }}
+          path: |
+            target/${{ matrix.target }}/release
+
