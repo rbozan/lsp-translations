@@ -9,7 +9,7 @@ jobs:
       matrix:
         target: [
             x86_64-unknown-linux-musl,
-            x86_64-apple-darwin,
+            # x86_64-apple-darwin,
             # x86_64-pc-windows-gnu,
           ]
     runs-on: ubuntu-latest
@@ -36,14 +36,14 @@ jobs:
     strategy:
       matrix:
         target: [
-            aarch64-apple-darwin,
-            i686-apple-darwin,
-            x86_64-apple-darwin,
+            # aarch64-apple-darwin,
+            # i686-apple-darwin,
+            # x86_64-apple-darwin,
 
-            i686-pc-windows-gnu,
-            x86_64-pc-windows-gnu,
+            # i686-pc-windows-gnu,
+            # x86_64-pc-windows-gnu,
 
-            aarch64-unknown-linux-musl
+            aarch64-unknown-linux-musl,
             i686-unknown-linux-musl,
             x86_64-unknown-linux-musl,
             armv7-unknown-linux-musleabihf,
@@ -57,7 +57,8 @@ jobs:
           toolchain: stable
           profile: minimal
           target: ${{ matrix.target }}
-      - uses: actions-rs/cargo@v1
+      - name: Build
+        uses: actions-rs/cargo@v1
         with:
           command: build
           args: --release --target=${{ matrix.target }}
@@ -67,4 +68,4 @@ jobs:
         with:
           name: ${{ matrix.target }}
           path: |
-            target/${{ matrix.target }}/release/lsp-translations!(.d)
+            target/${{ matrix.target }}/release/lsp-translations
