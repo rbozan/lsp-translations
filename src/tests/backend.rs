@@ -40,8 +40,8 @@ mod tests {
             "details": "testdsddasdasdddsad"
         },
         "key": {
-            "details": ".",
-            "filter": ""
+            "details": "^.+?\\.(?P<language>.+?)\\.",
+            "filter": "^.+?\\..+?\\.(.+$)"
         },
         "trace": {
             "server": "verbose"

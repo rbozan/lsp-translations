@@ -17,6 +17,11 @@ use std::sync::{Arc, Mutex};
 #[macro_use]
 extern crate derive_new;
 
+use regex::Regex;
+
+extern crate serde;
+extern crate serde_regex;
+
 #[cfg(test)]
 #[macro_use]
 extern crate ntest;
@@ -25,17 +30,18 @@ extern crate ntest;
 #[macro_use]
 extern crate lazy_static;
 
-use regex::Regex;
-
 #[derive(Deserialize, Debug, Default)]
 struct FileNameConfig {
-    details: String,
+    #[serde(with = "serde_regex")]
+    details: Option<Regex>,
 }
 
 #[derive(Deserialize, Debug, Default)]
 struct KeyConfig {
-    details: String,
-    filter: String,
+    #[serde(with = "serde_regex")]
+    details: Option<Regex>,
+    #[serde(with = "serde_regex")]
+    filter: Option<Regex>,
 }
 
 #[derive(Deserialize, Debug, Default)]
@@ -123,8 +129,7 @@ impl Backend {
     fn parse_translation_structure(&self, value: &Value, json_path: String) -> Vec<Definition> {
         let mut definitions = vec![];
 
-                        // println!("parse_translation_structure {:?}", value);
-
+        // println!("parse_translation_structure {:?}", value);
 
         match value {
             /* Value::Array(values) => values.iter().for_each(|value| {
@@ -143,19 +148,27 @@ impl Backend {
             }),
             Value::String(value) => {
                 // TODO: Move regex away from here
-                let key_filter_regex =
-                    Regex::new(&self.config.lock().unwrap().get_mut().key.filter).unwrap();
-                let key_details_regex =
-                    Regex::new(&self.config.lock().unwrap().get_mut().key.details).unwrap();
 
-                // key_filter_regex.captures_iter(&json_path).intersperse(".").collect();
-                // TODO: Fix this
-                let cleaned_key: Option<String> =
-                    key_filter_regex.captures(&json_path).and_then(|cap| {
-                        cap.get(0)
-                            .and_then(|group| Some(group.as_str().to_string()))
+                let key_details_regex = &self.config.lock().unwrap().get_mut().key.details;
+
+                let cleaned_key = self
+                    .config
+                    .lock()
+                    .unwrap()
+                    .get_mut()
+                    .key
+                    .filter
+                    .as_ref()
+                    .and_then(|key_filter_regex| {
+                        key_filter_regex.captures(&json_path).and_then(|cap| {
+                            println!("regex: {:?}", key_filter_regex);
+                            println!("cap: {:?}", cap);
+                            cap.get(1)
+                                .and_then(|group| Some(group.as_str().to_string()))
+                        })
                     });
 
+                // key_filter_regex.captures_iter(&json_path).intersperse(".").collect();
                 definitions.push(Definition {
                     key: json_path,
                     cleaned_key,
@@ -291,10 +304,6 @@ impl LanguageServer for Backend {
     }
 
     async fn completion(&self, _: CompletionParams) -> jsonrpc::Result<Option<CompletionResponse>> {
-        self.client
-            .log_message(MessageType::Info, "Completion!")
-            .await;
-
         Ok(Some(CompletionResponse::Array(
             self.definitions
                 .lock()
@@ -302,7 +311,11 @@ impl LanguageServer for Backend {
                 .get_mut()
                 .iter()
                 .map(|definition| CompletionItem {
-                    label: definition.key.clone(),
+                    label: definition
+                        .cleaned_key
+                        .as_ref()
+                        .unwrap_or(&definition.key)
+                        .clone(),
                     kind: Some(CompletionItemKind::Text),
                     detail: Some(format!("definition: {:#?}", definition)),
                     // documentation
