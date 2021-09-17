@@ -1,25 +1,24 @@
-use super::Backend;
+
 
 #[cfg(test)]
 mod tests {
-    use serde_json::Value;
-    use tower_lsp::{lsp_types::*, MessageStream};
+    
+    use tower_lsp::{MessageStream};
     use tower_test::mock::Spawn;
 
     use super::*;
-    use tower_lsp::jsonrpc::{ClientRequest, Incoming, Outgoing};
-    use tower_lsp::jsonrpc::{Response, Result};
+    use tower_lsp::jsonrpc::{Incoming, Outgoing};
+    use tower_lsp::jsonrpc::{Response};
     use tower_lsp::{Client, LanguageServer, LspService, Server};
 
     use core::task::Poll;
 
     use std::env;
-    use std::path::Path;
 
-    use futures::future::select_all;
-    use futures::join;
+    use crate::Backend;
+
     use futures::select;
-    use futures::{future, FutureExt, StreamExt};
+    use futures::{FutureExt, StreamExt};
 
     // use core::stream::Stream;
 
@@ -30,6 +29,7 @@ mod tests {
             r#"{"jsonrpc":"2.0","method":"initialize","params":{"capabilities":{}},"id":1}"#
         )
         .unwrap();
+
         static ref WORKSPACE_CONFIGURATION_REQUEST: Incoming = serde_json::from_str(
             r#"{"jsonrpc":"2.0","result": [
     {
@@ -50,6 +50,7 @@ mod tests {
 ], "id": 0 }"#
         )
         .unwrap();
+
         static ref WORKSPACE_WORKSPACE_FOLDERS_REQUEST: Incoming = serde_json::from_str(
             format!(
                 r#"
@@ -114,8 +115,42 @@ mod tests {
     }
 
     #[tokio::test]
-    #[timeout(60000)]
+    #[timeout(6000)]
     async fn send_configuration() {
+        let (mut service, mut messages) = init_service();
+
+        let ok = Outgoing::Response(serde_json::from_str::<Response>(INITIALIZE_RESPONSE).unwrap());
+        assert_eq!(service.call(INITIALIZE_REQUEST.clone()).await, Ok(Some(ok)));
+
+        let shutdown: Incoming = serde_json::from_str(INITIALIZED_REQUEST).unwrap();
+
+        assert_eq!(service.poll_ready(), Poll::Ready(Ok(())));
+
+        select!(
+            req = service.call(shutdown.clone()).fuse() => {
+                assert_eq!(req.unwrap(), None);
+            },
+            () = handle_lsp_message(
+                service,
+                &mut messages,
+                vec![
+                    &*WORKSPACE_CONFIGURATION_REQUEST,
+                    &*WORKSPACE_WORKSPACE_FOLDERS_REQUEST,
+                ],
+            ).fuse() => {
+                panic!("lsp messages should not finish faster than finishing request")
+            },
+        );
+
+        let message = (messages.next().await).unwrap();
+        let value = serde_json::to_value(message).unwrap();
+
+        assert_eq!(value["params"]["message"], "Loaded 3 definitions");
+    }
+
+    #[tokio::test]
+    #[timeout(6000)]
+    async fn completion() {
         let (mut service, mut messages) = init_service();
 
         let ok = Outgoing::Response(serde_json::from_str::<Response>(INITIALIZE_RESPONSE).unwrap());

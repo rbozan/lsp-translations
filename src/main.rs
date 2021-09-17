@@ -149,7 +149,7 @@ impl Backend {
             Value::String(value) => {
                 // TODO: Move regex away from here
 
-                let key_details_regex = &self.config.lock().unwrap().get_mut().key.details;
+                let _key_details_regex = &self.config.lock().unwrap().get_mut().key.details;
 
                 let cleaned_key = self
                     .config
