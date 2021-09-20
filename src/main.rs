@@ -150,9 +150,6 @@ impl Backend {
                 ));
             }),
             Value::String(value) => {
-                // TODO: Implmeent key details regex
-                let _key_details_regex = &self.config.lock().unwrap().get_mut().key.details;
-
                 let cleaned_key = self
                     .config
                     .lock()
@@ -169,11 +166,27 @@ impl Backend {
                         })
                     });
 
+                let language = &self
+                    .config
+                    .lock()
+                    .unwrap()
+                    .get_mut()
+                    .key
+                    .details
+                    .as_ref()
+                    .and_then(|key_details_regex| {
+                        key_details_regex.captures(&json_path).and_then(|cap| {
+                            cap.name("language")
+                                .and_then(|matches| Some(matches.as_str().to_string()))
+                        })
+                    });
+
                 // key_filter_regex.captures_iter(&json_path).intersperse(".").collect();
                 definitions.push(Definition {
                     key: json_path,
                     cleaned_key,
                     value: value.to_string(),
+                    language: language.clone(),
                     ..Default::default()
                 })
             }
@@ -181,19 +194,6 @@ impl Backend {
         }
 
         definitions
-    }
-
-    // TODO: Fix Mutex not locking.
-    fn get_definition_detail(&self, definition: &Definition) -> String {
-        self.definitions
-            .lock()
-            .unwrap()
-            .get_mut()
-            .iter()
-            .filter(|def| *def == definition)
-            .map(|def| format!("test {}", def.value))
-            .intersperse(", ".to_string())
-            .collect()
     }
 }
 
@@ -319,21 +319,39 @@ impl LanguageServer for Backend {
 
     async fn completion(&self, _: CompletionParams) -> jsonrpc::Result<Option<CompletionResponse>> {
         if let Ok(ref mut definitions) = self.definitions.try_lock() {
+            let definitions = definitions.get_mut();
+
             Ok(Some(CompletionResponse::Array(
                 definitions
-                    .get_mut()
                     .iter()
-                    .map(|definition| CompletionItem {
-                        label: definition
-                            .cleaned_key
-                            .as_ref()
-                            .unwrap_or(&definition.key)
-                            .clone(),
-                        kind: Some(CompletionItemKind::Text),
-                        detail: Some(format!("definition: {:#?}", definition)),
-                        // detail: Some(self.get_definition_detail(definition, definitions)),
-                        // documentation
-                        ..Default::default()
+                    .map(|definition| {
+                        let detail: String = definitions
+                            .iter()
+                            .filter(|def| *def == definition)
+                            .map(|def| {
+                                format!(
+                                    "{}{}",
+                                    def.language
+                                        .as_ref()
+                                        .and_then(|lang| Some(lang.to_owned() + ":\n"))
+                                        .unwrap_or("".to_string()),
+                                    def.value
+                                )
+                            })
+                            .intersperse("\n".to_string())
+                            .collect();
+
+                        CompletionItem {
+                            label: definition
+                                .cleaned_key
+                                .as_ref()
+                                .unwrap_or(&definition.key)
+                                .clone(),
+                            kind: Some(CompletionItemKind::Text),
+                            detail: Some(detail),
+                            // documentation
+                            ..Default::default()
+                        }
                     })
                     .collect(),
             )))
@@ -341,27 +359,6 @@ impl LanguageServer for Backend {
             println!("Gaat fout");
             Err(Error::internal_error())
         }
-        /* Ok(Some(CompletionResponse::Array(
-                   self.definitions
-                       .lock()
-                       .unwrap()
-                       .get_mut()
-                       .iter()
-                       .map(|definition| CompletionItem {
-                           label: definition
-                               .cleaned_key
-                               .as_ref()
-                               .unwrap_or(&definition.key)
-                               .clone(),
-                           kind: Some(CompletionItemKind::Text),
-                           // detail: Some(format!("definition: {:#?}", definition)),
-                           detail: Some(self.get_definition_detail(definition)),
-                           // documentation
-                           ..Default::default()
-                       })
-                       .collect(),
-               )))
-        */
     }
 
     async fn hover(&self, _: HoverParams) -> jsonrpc::Result<Option<Hover>> {
