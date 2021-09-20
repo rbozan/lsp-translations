@@ -106,20 +106,25 @@ mod tests {
         }"#).unwrap();
 
         static ref COMPLETION_RESPONSE: Outgoing =  Outgoing::Response(serde_json::from_str(r#"{
-            "jsonrpc":"2.0",
-                            "id": 1,
+            "jsonrpc": "2.0",
             "result": [
-                {
-                    "detail": "definition:  Definition {\n    key: \"1234567890.en-us.main.content.heading.body\",\n    cleaned_key: Some(\n        \"main.content.heading.body\",\n    ),\n    file: \"\",\n    language: None,\n    value: \"This is the body of my website.\"}",
-                    "kind": 1,
-                    "label": "main.content.heading.body"
-                },
-                {
-                    "detail": "definition: Definition {\n    key: \"1234567890.en-us.main.content.heading.title\",\n    cleaned_key: Some(\n        \"main.content.heading.title\",\n    ),\n    file: \"\",\n    language: None,\n    value: \"A regular header for my content\"}",
-                    "kind": 1,
-                    "label": "main.content.heading.body"
-                }
-            ]
+            {
+              "detail": "definition: Definition {\n    key: \"1234567890.en-us.main.content.heading.body\",\n    cleaned_key: Some(\n        \"main.content.heading.body\",\n    ),\n    file: \"\",\n    language: None,\n    value: \"This is the body of my website.\",\n}",
+              "kind": 1,
+              "label": "main.content.heading.body"
+            },
+            {
+              "detail": "definition: Definition {\n    key: \"1234567890.en-us.main.content.heading.title\",\n    cleaned_key: Some(\n        \"main.content.heading.title\",\n    ),\n    file: \"\",\n    language: None,\n    value: \"A regular header for my content\",\n}",
+              "kind": 1,
+              "label": "main.content.heading.title"
+            },
+            {
+              "detail": "definition: Definition {\n    key: \"1234567890.en-us.main.header.title\",\n    cleaned_key: Some(\n        \"main.header.title\",\n    ),\n    file: \"\",\n    language: None,\n    value: \"This title will appear in the header.\",\n}",
+              "kind": 1,
+              "label": "main.header.title"
+            }
+            ],
+            "id": 1
         }"#).unwrap());
     }
 
@@ -185,30 +190,14 @@ mod tests {
     #[tokio::test]
     #[timeout(8000)]
     async fn completion() {
-        let (mut service, mut messages) = prepare_workspace().await;
-        // TODO: Completion request
-        //
+        let (mut service, _) = prepare_workspace().await;
+
+        // println!("{:}", serde_json::to_string_pretty(&(&service.call(COMPLETION_REQUEST.clone()).await).as_ref().unwrap()).unwrap());
+
         assert_eq!(
             service.call(COMPLETION_REQUEST.clone()).await,
             Ok(Some(COMPLETION_RESPONSE.clone()))
         );
-
-        /*
-        select!(
-            req = service.call(COMPLETION_REQUEST.clone()).fuse() => {
-                assert_eq!(req.unwrap(), Ok(Some(COMPLETION_RESPONSE.clone())));
-            },
-            () = handle_lsp_message(
-                &mut service,
-                &mut messages,
-                vec![
-                    &*WORKSPACE_CONFIGURATION_REQUEST,
-                    &*WORKSPACE_WORKSPACE_FOLDERS_REQUEST,
-                ],
-            ).fuse() => {
-                panic!("lsp messages should not finish faster than request")
-            },
-        ); */
     }
 
     // Helper function

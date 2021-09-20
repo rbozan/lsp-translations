@@ -16,6 +16,7 @@ futures = "0.3.17"
 merge = "0.1.0"
 derive-new = "0.5"
 glob = "0.3.0"
+itertools = "0.10.1"
 
 [dev-dependencies]
 tower-test = "0.4.0"

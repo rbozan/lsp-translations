@@ -2,7 +2,8 @@
 mod tests;
 
 use serde_json::Value;
-use tower_lsp::jsonrpc;
+use tower_lsp::jsonrpc::ErrorCode;
+use tower_lsp::jsonrpc::{self, Error};
 use tower_lsp::lsp_types::*;
 use tower_lsp::{Client, LanguageServer, LspService, Server};
 
@@ -13,6 +14,8 @@ use std::fs::File;
 use std::io::BufReader;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
+
+use itertools::Itertools;
 
 #[macro_use]
 extern crate derive_new;
@@ -147,8 +150,7 @@ impl Backend {
                 ));
             }),
             Value::String(value) => {
-                // TODO: Move regex away from here
-
+                // TODO: Implmeent key details regex
                 let _key_details_regex = &self.config.lock().unwrap().get_mut().key.details;
 
                 let cleaned_key = self
@@ -161,7 +163,6 @@ impl Backend {
                     .as_ref()
                     .and_then(|key_filter_regex| {
                         key_filter_regex.captures(&json_path).and_then(|cap| {
-                            println!("regex: {:?}", key_filter_regex);
                             println!("cap: {:?}", cap);
                             cap.get(1)
                                 .and_then(|group| Some(group.as_str().to_string()))
@@ -180,6 +181,19 @@ impl Backend {
         }
 
         definitions
+    }
+
+    // TODO: Fix Mutex not locking.
+    fn get_definition_detail(&self, definition: &Definition) -> String {
+        self.definitions
+            .lock()
+            .unwrap()
+            .get_mut()
+            .iter()
+            .filter(|def| *def == definition)
+            .map(|def| format!("test {}", def.value))
+            .intersperse(", ".to_string())
+            .collect()
     }
 }
 
@@ -304,30 +318,50 @@ impl LanguageServer for Backend {
     }
 
     async fn completion(&self, _: CompletionParams) -> jsonrpc::Result<Option<CompletionResponse>> {
-        Ok(Some(CompletionResponse::Array(
-            self.definitions
-                .lock()
-                .unwrap()
-                .get_mut()
-                .iter()
-                .map(|definition| CompletionItem {
-                    label: definition
-                        .cleaned_key
-                        .as_ref()
-                        .unwrap_or(&definition.key)
-                        .clone(),
-                    kind: Some(CompletionItemKind::Text),
-                    detail: Some(format!("definition: {:#?}", definition)),
-                    // documentation
-                    ..Default::default()
-                })
-                .collect(),
-        )))
-
-        /* Ok(Some(CompletionResponse::Array(vec![
-            CompletionItem::new_simple("Hello".to_string(), "Some detail".to_string()),
-            CompletionItem::new_simple("Bye".to_string(), "More detail".to_string()),
-        ]))) */
+        if let Ok(ref mut definitions) = self.definitions.try_lock() {
+            Ok(Some(CompletionResponse::Array(
+                definitions
+                    .get_mut()
+                    .iter()
+                    .map(|definition| CompletionItem {
+                        label: definition
+                            .cleaned_key
+                            .as_ref()
+                            .unwrap_or(&definition.key)
+                            .clone(),
+                        kind: Some(CompletionItemKind::Text),
+                        detail: Some(format!("definition: {:#?}", definition)),
+                        // detail: Some(self.get_definition_detail(definition, definitions)),
+                        // documentation
+                        ..Default::default()
+                    })
+                    .collect(),
+            )))
+        } else {
+            println!("Gaat fout");
+            Err(Error::internal_error())
+        }
+        /* Ok(Some(CompletionResponse::Array(
+                   self.definitions
+                       .lock()
+                       .unwrap()
+                       .get_mut()
+                       .iter()
+                       .map(|definition| CompletionItem {
+                           label: definition
+                               .cleaned_key
+                               .as_ref()
+                               .unwrap_or(&definition.key)
+                               .clone(),
+                           kind: Some(CompletionItemKind::Text),
+                           // detail: Some(format!("definition: {:#?}", definition)),
+                           detail: Some(self.get_definition_detail(definition)),
+                           // documentation
+                           ..Default::default()
+                       })
+                       .collect(),
+               )))
+        */
     }
 
     async fn hover(&self, _: HoverParams) -> jsonrpc::Result<Option<Hover>> {
@@ -365,4 +399,13 @@ struct Definition {
     language: Option<String>,
     #[merge(skip)]
     value: String,
+}
+
+impl PartialEq for Definition {
+    fn eq(&self, other: &Self) -> bool {
+        match &self.cleaned_key {
+            Some(_) => self.cleaned_key == other.cleaned_key,
+            None => self.key == other.key,
+        }
+    }
 }
