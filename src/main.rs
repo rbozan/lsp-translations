@@ -66,8 +66,8 @@ pub struct Backend {
 
 impl Backend {
     async fn fetch_translations(&self, config_value: Value) {
+        // TODO: Move setting config to other function
         let config: ExtensionConfig = serde_json::from_value(config_value).unwrap();
-
         self.config.lock().unwrap().set(config);
 
         let folders = self.client.workspace_folders().await.unwrap().unwrap();
@@ -92,17 +92,26 @@ impl Backend {
                             .to_str()
                         {
                             Some(glob_pattern) => match glob(glob_pattern) {
-                                Ok(paths) => paths
-                                    .map(|path| match path {
-                                        Ok(path) => Some(path),
-                                        Err(_) => None,
-                                    })
-                                    .collect::<Option<PathBuf>>(),
+                                Ok(paths) => {
+                                    let result: Vec<Option<PathBuf>> = paths
+                                        .map(|path| match path {
+                                            Ok(path) => {
+                                                // panic!("paths glob: glob pattesrn: {:?}", PathBuf::from(&path));
+                                                Some(path)
+                                            }
+                                            Err(_) => None,
+                                        })
+                                        .collect();
+
+                                    Some(result)
+                                }
                                 Err(_) => None,
                             },
                             None => None,
                         }
                     })
+                    .flatten()
+                    .filter_map(|path| path)
                     .collect::<PathBuf>()
             })
             .collect();
@@ -111,7 +120,7 @@ impl Backend {
             .log_message(MessageType::Info, format!("path bufs: {:?}", files))
             .await;
 
-        self.read_translation(&files[0]).await;
+        (self.read_translation(&files[0]).await).unwrap();
     }
 
     async fn read_translation(&self, path: &PathBuf) -> Result<(), Box<dyn std::error::Error>> {
@@ -242,6 +251,7 @@ impl LanguageServer for Backend {
                 self.client
                     .log_message(MessageType::Log, format!("config received {:?}", config))
                     .await;
+
                 self.fetch_translations(config[0].clone()).await;
                 self.client
                     .log_message(
