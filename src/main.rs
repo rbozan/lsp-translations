@@ -1,11 +1,19 @@
 #[path = "./tests/backend.rs"]
 mod tests;
 
+use lsp_types::request::WorkspaceFoldersRequest;
+use lsp_types::CompletionOptions;
+use lsp_types::HoverProviderCapability;
+use lsp_types::OneOf;
+use lsp_types::WorkspaceFoldersServerCapabilities;
+use lsp_types::WorkspaceServerCapabilities;
+use lsp_types::{
+    request::GotoDefinition, GotoDefinitionResponse, InitializeParams, ServerCapabilities,
+    TextDocumentSyncCapability, TextDocumentSyncKind,
+};
+use lsp_types::{LogMessageParams, WorkspaceFolder};
+use lsp_server::{Connection, Message, Notification, Request, RequestId, Response};
 use serde_json::Value;
-use tower_lsp::jsonrpc::ErrorCode;
-use tower_lsp::jsonrpc::{self, Error};
-use tower_lsp::lsp_types::*;
-use tower_lsp::{Client, LanguageServer, LspService, Server};
 
 use glob::glob;
 use serde::Deserialize;
@@ -57,7 +65,6 @@ struct ExtensionConfig {
 
 #[derive(new)]
 pub struct Backend {
-    client: Client,
     #[new(value = "Arc::new(Mutex::new(Cell::new(vec![])))")]
     definitions: Arc<Mutex<Cell<Vec<Definition>>>>,
     #[new(value = "Arc::new(Mutex::new(Cell::new(ExtensionConfig::default())))")]
@@ -65,17 +72,19 @@ pub struct Backend {
 }
 
 impl Backend {
-    async fn fetch_translations(&self, config_value: Value) {
+    async fn read_config(&self, connection: Connection, config_value: Value) {
         // TODO: Move setting config to other function
         let config: ExtensionConfig = serde_json::from_value(config_value).unwrap();
         self.config.lock().unwrap().set(config);
 
-        let folders = self.client.workspace_folders().await.unwrap().unwrap();
+        connection.sender.send(Message::Request(Request {
+            id: RequestId::from("workspaceFolders".to_string()),
+            method: "workspace/workspaceFolders".to_string(),
+            params: serde_json::Value::default(),
+        })).unwrap();
+    }
 
-        self.client
-            .log_message(MessageType::Info, format!("folders: {:?}", folders))
-            .await;
-
+    async fn fetch_translations(&self, connection: Connection, folders: Vec<WorkspaceFolder>) {
         let files: Vec<PathBuf> = folders
             .iter()
             .map(|folder| {
@@ -116,9 +125,7 @@ impl Backend {
             })
             .collect();
 
-        self.client
-            .log_message(MessageType::Info, format!("path bufs: {:?}", files))
-            .await;
+        eprintln!("path bufs: {:?}", files);
 
         (self.read_translation(&files[0]).await).unwrap();
     }
@@ -206,33 +213,12 @@ impl Backend {
     }
 }
 
-#[tower_lsp::async_trait]
+/*
 impl LanguageServer for Backend {
     async fn initialize(&self, _: InitializeParams) -> jsonrpc::Result<InitializeResult> {
         Ok(InitializeResult {
             server_info: None,
-            capabilities: ServerCapabilities {
-                text_document_sync: Some(TextDocumentSyncCapability::Kind(
-                    TextDocumentSyncKind::Full,
-                )),
-                hover_provider: Some(HoverProviderCapability::Simple(true)),
-                completion_provider: Some(CompletionOptions {
-                    resolve_provider: Some(true),
-                    trigger_characters: None,
-                    // trigger_characters: Some(vec!["'".to_string(), "\"".to_string()]),
-                    work_done_progress_options: Default::default(),
-                    all_commit_characters: None,
-                }),
-                workspace: Some(WorkspaceServerCapabilities {
-                    workspace_folders: Some(WorkspaceFoldersServerCapabilities {
-                        supported: Some(true),
-                        change_notifications: Some(OneOf::Left(true)),
-                    }),
-                    file_operations: None,
-                }),
-                ..ServerCapabilities::default()
-            },
-        })
+            capabilities: ServerCapabilities         })
     }
 
     async fn initialized(&self, _: InitializedParams) {
@@ -265,66 +251,6 @@ impl LanguageServer for Backend {
             }
             Err(err) => self.client.log_message(MessageType::Error, err).await,
         }
-    }
-
-    async fn shutdown(&self) -> jsonrpc::Result<()> {
-        Ok(())
-    }
-
-    async fn did_change_workspace_folders(&self, _: DidChangeWorkspaceFoldersParams) {
-        self.client
-            .log_message(MessageType::Info, "workspace folders changed!")
-            .await;
-    }
-
-    async fn did_change_configuration(&self, _: DidChangeConfigurationParams) {
-        self.client
-            .log_message(MessageType::Info, "configuration changed!")
-            .await;
-    }
-
-    async fn did_change_watched_files(&self, _: DidChangeWatchedFilesParams) {
-        self.client
-            .log_message(MessageType::Info, "watched files have changed!")
-            .await;
-    }
-
-    async fn execute_command(&self, _: ExecuteCommandParams) -> jsonrpc::Result<Option<Value>> {
-        self.client
-            .log_message(MessageType::Info, "command executed!")
-            .await;
-
-        match self.client.apply_edit(WorkspaceEdit::default()).await {
-            Ok(res) if res.applied => self.client.log_message(MessageType::Info, "applied").await,
-            Ok(_) => self.client.log_message(MessageType::Info, "rejected").await,
-            Err(err) => self.client.log_message(MessageType::Error, err).await,
-        }
-
-        Ok(None)
-    }
-
-    async fn did_open(&self, _: DidOpenTextDocumentParams) {
-        self.client
-            .log_message(MessageType::Info, "file opened!")
-            .await;
-    }
-
-    async fn did_change(&self, _: DidChangeTextDocumentParams) {
-        self.client
-            .log_message(MessageType::Info, "file changed!")
-            .await;
-    }
-
-    async fn did_save(&self, _: DidSaveTextDocumentParams) {
-        self.client
-            .log_message(MessageType::Info, "file saved!")
-            .await;
-    }
-
-    async fn did_close(&self, _: DidCloseTextDocumentParams) {
-        self.client
-            .log_message(MessageType::Info, "file closed!")
-            .await;
     }
 
     async fn completion(&self, _: CompletionParams) -> jsonrpc::Result<Option<CompletionResponse>> {
@@ -382,17 +308,87 @@ impl LanguageServer for Backend {
         }))
     }
 }
+ */
 
-#[tokio::main]
-async fn main() {
-    let stdin = tokio::io::stdin();
-    let stdout = tokio::io::stdout();
+fn main_loop(
+    connection: Connection,
+    params: serde_json::Value,
+) -> Result<(), Box<dyn std::error::Error + Sync + Send>> {
+    let params: InitializeParams = serde_json::from_value(params).unwrap();
+    eprintln!("starting example main loop");
+    for msg in &connection.receiver {
+        eprintln!("got msg: {:?}", msg);
+        match msg {
+            Message::Request(req) => {
+                if connection.handle_shutdown(&req)? {
+                    return Ok(());
+                }
+                eprintln!("got request: {:?}", req);
+                if let Ok((id, params)) = cast::<GotoDefinition>(req) {
+                    eprintln!("got gotoDefinition request #{}: {:?}", id, params);
+                    let result = Some(GotoDefinitionResponse::Array(Vec::new()));
+                    let result = serde_json::to_value(&result).unwrap();
+                    let resp = Response {
+                        id,
+                        result: Some(result),
+                        error: None,
+                    };
+                    connection.sender.send(Message::Response(resp))?;
+                    continue;
+                };
+            }
+            Message::Response(resp) => {
+                eprintln!("got response: {:?}", resp);
+            }
+            Message::Notification(not) => {
+                eprintln!("got notification: {:?}", not);
+            }
+        }
+    }
+    Ok(())
+}
 
-    let (service, messages) = LspService::new(|client| Backend::new(client));
-    Server::new(stdin, stdout)
-        .interleave(messages)
-        .serve(service)
-        .await;
+fn cast<R>(req: Request) -> Result<(RequestId, R::Params), Request>
+where
+    R: lsp_types::request::Request,
+    R::Params: serde::de::DeserializeOwned,
+{
+    req.extract(R::METHOD)
+}
+
+fn main() -> Result<(), Box<dyn std::error::Error + Sync + Send>> {
+    let (connection, io_threads) = Connection::stdio();
+
+    // Run the server and wait for the two threads to end (typically by trigger LSP Exit event).
+    let server_capabilities = serde_json::to_value(ServerCapabilities {
+        text_document_sync: Some(TextDocumentSyncCapability::Kind(TextDocumentSyncKind::Full)),
+        hover_provider: Some(HoverProviderCapability::Simple(true)),
+        completion_provider: Some(CompletionOptions {
+            resolve_provider: Some(true),
+            trigger_characters: None,
+            // trigger_characters: Some(vec!["'".to_string(), "\"".to_string()]),
+            work_done_progress_options: Default::default(),
+            all_commit_characters: None,
+        }),
+        workspace: Some(WorkspaceServerCapabilities {
+            workspace_folders: Some(WorkspaceFoldersServerCapabilities {
+                supported: Some(true),
+                change_notifications: Some(OneOf::Left(true)),
+            }),
+            file_operations: None,
+        }),
+        ..ServerCapabilities::default()
+    })
+    .unwrap();
+
+    let initialization_params = connection.initialize(server_capabilities)?;
+    // read_config();
+    main_loop(connection, initialization_params)?;
+    io_threads.join()?;
+
+    // Shut down gracefully.
+    eprintln!("shutting down server");
+    Ok(())
 }
 
 use merge::Merge;
