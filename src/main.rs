@@ -1,8 +1,12 @@
 #[path = "./tests/backend.rs"]
 mod tests;
 
+use lsp_server::{Connection, Message, Notification, Request, RequestId, Response};
+use lsp_types::request::WorkspaceConfiguration;
 use lsp_types::request::WorkspaceFoldersRequest;
 use lsp_types::CompletionOptions;
+use lsp_types::ConfigurationItem;
+use lsp_types::ConfigurationParams;
 use lsp_types::HoverProviderCapability;
 use lsp_types::OneOf;
 use lsp_types::WorkspaceFoldersServerCapabilities;
@@ -12,7 +16,7 @@ use lsp_types::{
     TextDocumentSyncCapability, TextDocumentSyncKind,
 };
 use lsp_types::{LogMessageParams, WorkspaceFolder};
-use lsp_server::{Connection, Message, Notification, Request, RequestId, Response};
+// use crossbeam_channel::SendError;
 use serde_json::Value;
 
 use glob::glob;
@@ -65,6 +69,8 @@ struct ExtensionConfig {
 
 #[derive(new)]
 pub struct Backend {
+    connection: Connection,
+    initialization_params: Value,
     #[new(value = "Arc::new(Mutex::new(Cell::new(vec![])))")]
     definitions: Arc<Mutex<Cell<Vec<Definition>>>>,
     #[new(value = "Arc::new(Mutex::new(Cell::new(ExtensionConfig::default())))")]
@@ -72,19 +78,58 @@ pub struct Backend {
 }
 
 impl Backend {
-    async fn read_config(&self, connection: Connection, config_value: Value) {
-        // TODO: Move setting config to other function
-        let config: ExtensionConfig = serde_json::from_value(config_value).unwrap();
-        self.config.lock().unwrap().set(config);
-
-        connection.sender.send(Message::Request(Request {
-            id: RequestId::from("workspaceFolders".to_string()),
-            method: "workspace/workspaceFolders".to_string(),
-            params: serde_json::Value::default(),
-        })).unwrap();
+    /* impl LanguageServer for Backend {
+    async fn initialize(&self, _: InitializeParams) -> jsonrpc::Result<InitializeResult> {
+        Ok(InitializeResult {
+            server_info: None,
+            capabilities: ServerCapabilities         })
     }
 
-    async fn fetch_translations(&self, connection: Connection, folders: Vec<WorkspaceFolder>) {
+    async fn initialized(&self, _: InitializedParams) {
+        // Read configuration
+        let config = self
+            .client
+            .configuration(vec![ConfigurationItem {
+                scope_uri: None,
+                // section: Some("lsp-translations.translationFiles".to_string()),
+                section: Some("lsp-translations".to_string()),
+            }])
+            .await; */
+
+    fn request_config(&self) {
+        let params: ConfigurationParams = ConfigurationParams {
+            items: vec![ConfigurationItem {
+                scope_uri: None,
+                section: Some("lsp-translations".to_string()),
+            }],
+        };
+
+        self.connection
+            .sender
+            .send(Message::Request(Request {
+                id: RequestId::from("workspaceConfiguration".to_string()),
+                method: "workspace/configuration".to_string(),
+                params: serde_json::to_value(params).unwrap(),
+            }))
+            .unwrap();
+    }
+
+    fn read_config(&self, params: Value) {
+        // TODO: Move setting config to other function
+        let config: ExtensionConfig = serde_json::from_value(params[0].clone()).unwrap();
+        self.config.lock().unwrap().set(config);
+
+        self.connection
+            .sender
+            .send(Message::Request(Request {
+                id: RequestId::from("workspaceFolders".to_string()),
+                method: "workspace/workspaceFolders".to_string(),
+                params: serde_json::Value::default(),
+            }))
+            .unwrap();
+    }
+
+    fn fetch_translations(&self, folders: Vec<WorkspaceFolder>) {
         let files: Vec<PathBuf> = folders
             .iter()
             .map(|folder| {
@@ -127,10 +172,12 @@ impl Backend {
 
         eprintln!("path bufs: {:?}", files);
 
-        (self.read_translation(&files[0]).await).unwrap();
+        self.read_translation(&files[0]).unwrap();
+
+        eprintln!("Loaded {:?} definitions", self.definitions.lock().unwrap().get_mut());
     }
 
-    async fn read_translation(&self, path: &PathBuf) -> Result<(), Box<dyn std::error::Error>> {
+    fn read_translation(&self, path: &PathBuf) -> Result<(), Box<dyn std::error::Error>> {
         let file = File::open(path)?;
         let reader = BufReader::new(file);
 
@@ -210,6 +257,53 @@ impl Backend {
         }
 
         definitions
+    }
+
+    fn main_loop(&self) -> Result<(), Box<dyn std::error::Error + Sync + Send>> {
+        let connection = &self.connection;
+
+        let params: InitializeParams =
+            serde_json::from_value(self.initialization_params.clone()).unwrap();
+        eprintln!("starting example main loop");
+        for msg in &connection.receiver {
+            eprintln!("got msg: {:?}", msg);
+            match msg {
+                Message::Request(req) => {
+                    if connection.handle_shutdown(&req)? {
+                        return Ok(());
+                    }
+                    eprintln!("got request: {:?}", req);
+                    if let Ok((id, params)) = cast::<GotoDefinition>(req) {
+                        eprintln!("got gotoDefinition request #{}: {:?}", id, params);
+                        let result = Some(GotoDefinitionResponse::Array(Vec::new()));
+                        let result = serde_json::to_value(&result).unwrap();
+                        let resp = Response {
+                            id,
+                            result: Some(result),
+                            error: None,
+                        };
+                        connection.sender.send(Message::Response(resp))?;
+                        continue;
+                    };
+                }
+                Message::Response(resp) => {
+                    eprintln!("got response: {:?}", resp);
+
+                    if resp.id == RequestId::from("workspaceConfiguration".to_string()) {
+                        self.read_config(resp.result.unwrap());
+                    } else if resp.id == RequestId::from("workspaceFolders".to_string()) {
+                        let folders: Vec<WorkspaceFolder> =
+                            serde_json::from_value(resp.result.unwrap()).unwrap();
+                        self.fetch_translations(folders);
+                        // WorkspaceFolder
+                    }
+                }
+                Message::Notification(not) => {
+                    eprintln!("got notification: {:?}", not);
+                }
+            }
+        }
+        Ok(())
     }
 }
 
@@ -309,45 +403,6 @@ impl LanguageServer for Backend {
     }
 }
  */
-
-fn main_loop(
-    connection: Connection,
-    params: serde_json::Value,
-) -> Result<(), Box<dyn std::error::Error + Sync + Send>> {
-    let params: InitializeParams = serde_json::from_value(params).unwrap();
-    eprintln!("starting example main loop");
-    for msg in &connection.receiver {
-        eprintln!("got msg: {:?}", msg);
-        match msg {
-            Message::Request(req) => {
-                if connection.handle_shutdown(&req)? {
-                    return Ok(());
-                }
-                eprintln!("got request: {:?}", req);
-                if let Ok((id, params)) = cast::<GotoDefinition>(req) {
-                    eprintln!("got gotoDefinition request #{}: {:?}", id, params);
-                    let result = Some(GotoDefinitionResponse::Array(Vec::new()));
-                    let result = serde_json::to_value(&result).unwrap();
-                    let resp = Response {
-                        id,
-                        result: Some(result),
-                        error: None,
-                    };
-                    connection.sender.send(Message::Response(resp))?;
-                    continue;
-                };
-            }
-            Message::Response(resp) => {
-                eprintln!("got response: {:?}", resp);
-            }
-            Message::Notification(not) => {
-                eprintln!("got notification: {:?}", not);
-            }
-        }
-    }
-    Ok(())
-}
-
 fn cast<R>(req: Request) -> Result<(RequestId, R::Params), Request>
 where
     R: lsp_types::request::Request,
@@ -382,8 +437,9 @@ fn main() -> Result<(), Box<dyn std::error::Error + Sync + Send>> {
     .unwrap();
 
     let initialization_params = connection.initialize(server_capabilities)?;
-    // read_config();
-    main_loop(connection, initialization_params)?;
+    let server = Backend::new(connection, initialization_params);
+    server.request_config();
+    server.main_loop()?;
     io_threads.join()?;
 
     // Shut down gracefully.
