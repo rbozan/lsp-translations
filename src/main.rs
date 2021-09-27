@@ -142,6 +142,7 @@ impl Backend {
         let mut definitions = vec![];
 
         // println!("parse_translation_structure {:?}", value);
+        //
 
         match value {
             /* Value::Array(values) => values.iter().for_each(|value| {
@@ -169,7 +170,6 @@ impl Backend {
                     .as_ref()
                     .and_then(|key_filter_regex| {
                         key_filter_regex.captures(&json_path).and_then(|cap| {
-                            println!("cap: {:?}", cap);
                             cap.get(1)
                                 .and_then(|group| Some(group.as_str().to_string()))
                         })
@@ -199,7 +199,7 @@ impl Backend {
                     ..Default::default()
                 })
             }
-            _ => println!("TODO: Error, translation file is not an array"),
+            _ => panic!("TODO: Error, translation file is not an object or string"),
         }
 
         definitions
@@ -252,6 +252,7 @@ impl LanguageServer for Backend {
                     .await;
 
                 self.fetch_translations(config[0].clone()).await;
+                eprintln!("hier fetch translsiontas klaar");
                 self.client
                     .log_message(
                         MessageType::Info,
@@ -261,12 +262,19 @@ impl LanguageServer for Backend {
                         ),
                     )
                     .await;
+
+                eprintln!(
+                    "Loaded {:} definitions",
+                    self.definitions.lock().unwrap().get_mut().len()
+                );
             }
             Err(err) => self.client.log_message(MessageType::Error, err).await,
         }
+        eprintln!("Match statement klaar!");
     }
 
     async fn shutdown(&self) -> jsonrpc::Result<()> {
+        eprintln!("Shutting down...");
         Ok(())
     }
 
@@ -371,6 +379,7 @@ impl LanguageServer for Backend {
     }
 
     async fn hover(&self, _: HoverParams) -> jsonrpc::Result<Option<Hover>> {
+        eprintln!("HOVERING!!");
         self.client.log_message(MessageType::Info, "hoverrr").await;
 
         Ok(Some(Hover {
