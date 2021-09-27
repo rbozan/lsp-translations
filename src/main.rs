@@ -2,7 +2,6 @@
 mod tests;
 
 use serde_json::Value;
-use tower_lsp::jsonrpc::ErrorCode;
 use tower_lsp::jsonrpc::{self, Error};
 use tower_lsp::lsp_types::*;
 use tower_lsp::{Client, LanguageServer, LspService, Server};
@@ -262,15 +261,9 @@ impl LanguageServer for Backend {
                         ),
                     )
                     .await;
-
-                eprintln!(
-                    "Loaded {:} definitions",
-                    self.definitions.lock().unwrap().get_mut().len()
-                );
             }
             Err(err) => self.client.log_message(MessageType::Error, err).await,
         }
-        eprintln!("Match statement klaar!");
     }
 
     async fn shutdown(&self) -> jsonrpc::Result<()> {
@@ -341,7 +334,9 @@ impl LanguageServer for Backend {
             Ok(Some(CompletionResponse::Array(
                 definitions
                     .iter()
+                    .unique_by(|definition| definition.key.to_string())
                     .map(|definition| {
+                        // TODO: Move detail to completionItem/resolve
                         let detail: String = definitions
                             .iter()
                             .filter(|def| *def == definition)
@@ -365,15 +360,14 @@ impl LanguageServer for Backend {
                                 .unwrap_or(&definition.key)
                                 .clone(),
                             kind: Some(CompletionItemKind::Text),
-                            detail: Some(detail),
-                            // documentation
+                            detail: Some(detail), // TODO: None
                             ..Default::default()
                         }
                     })
                     .collect(),
             )))
         } else {
-            println!("Gaat fout");
+            eprintln!("Gaat fout");
             Err(Error::internal_error())
         }
     }
