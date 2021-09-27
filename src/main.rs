@@ -120,20 +120,20 @@ impl Backend {
             .log_message(MessageType::Info, format!("path bufs: {:?}", files))
             .await;
 
-        (self.read_translation(&files[0]).await).unwrap();
+        (self.read_translation(&files[0])).unwrap();
     }
 
-    async fn read_translation(&self, path: &PathBuf) -> Result<(), Box<dyn std::error::Error>> {
+    fn read_translation(&self, path: &PathBuf) -> Result<(), Box<dyn std::error::Error>> {
         let file = File::open(path)?;
         let reader = BufReader::new(file);
 
         // Read the JSON contents of the file as an instance of `User`.
         let value: Value = serde_json::from_reader(reader)?;
 
-        let mut definitions = self.definitions.lock().unwrap();
-        definitions.get_mut().clear();
+        let new_definitions = self.parse_translation_structure(&value, "".to_string());
 
-        definitions.set(self.parse_translation_structure(&value, "".to_string()));
+        let definitions = self.definitions.lock().unwrap();
+        definitions.set(new_definitions);
 
         Ok(())
     }
@@ -241,7 +241,6 @@ impl LanguageServer for Backend {
             .client
             .configuration(vec![ConfigurationItem {
                 scope_uri: None,
-                // section: Some("lsp-translations.translationFiles".to_string()),
                 section: Some("lsp-translations".to_string()),
             }])
             .await;
