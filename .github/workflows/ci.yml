@@ -22,6 +22,11 @@ jobs:
           profile: minimal
           target: ${{ matrix.target }}
 
+      - name: Run check
+        uses: actions-rs/cargo@v1
+        with:
+          command: check
+
       - name: Run tests
         uses: actions-rs/cargo@v1
         with:
