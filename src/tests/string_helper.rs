@@ -11,8 +11,10 @@ fn finds_simple_translation_key() {
         "#
             .to_string(),
             &55
-        ),
-        Some("some-key".to_string())
+        )
+        .unwrap()
+        .as_str(),
+        "some-key"
     );
 }
 
@@ -27,8 +29,10 @@ fn finds_translation_key_in_inline_function() {
         "#
             .to_string(),
             &59
-        ),
-        Some("some-key".to_string())
+        )
+        .unwrap()
+        .as_str(),
+        "some-key"
     );
 }
 
@@ -44,8 +48,10 @@ fn finds_translation_key_on_correct_position() {
         "#
             .to_string(),
             &90
-        ),
-        Some("second-key".to_string())
+        )
+        .unwrap()
+        .as_str(),
+        "second-key"
     );
 }
 

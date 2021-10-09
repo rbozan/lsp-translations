@@ -5,6 +5,9 @@ mod lsp_document;
 use crate::lsp_document::FullTextDocument;
 
 mod string_helper;
+use crate::string_helper::find_translation_key_by_position;
+use country_emoji::{code, flag, name};
+use std::convert::TryInto;
 
 use serde_json::Value;
 use tower_lsp::jsonrpc::{self, Error};
@@ -134,7 +137,6 @@ impl Backend {
         let file = File::open(path)?;
         let reader = BufReader::new(file);
 
-        // Read the JSON contents of the file as an instance of `User`.
         let value: Value = serde_json::from_reader(reader)?;
 
         let new_definitions = self.parse_translation_structure(&value, "".to_string());
@@ -152,9 +154,6 @@ impl Backend {
         //
 
         match value {
-            /* Value::Array(values) => values.iter().for_each(|value| {
-                definitions.append(&mut self.parse_translation_structure(value));
-            }), */
             Value::Object(values) => values.iter().for_each(|(key, value)| {
                 definitions.append(&mut self.parse_translation_structure(
                     value,
@@ -210,6 +209,28 @@ impl Backend {
         }
 
         definitions
+    }
+
+    fn get_definition_description_by_key(&self, key: String) -> String {
+        format!(
+            "flag|language|translation\n-|-|-\n{}",
+            self.definitions
+                .lock()
+                .unwrap()
+                .get_mut()
+                .iter()
+                .filter(|definition| *definition == &key)
+                .map(|def| {
+                    format!(
+                        "{}|**{}**|{}",
+                        def.get_flag().unwrap_or_default(),
+                        def.language.as_ref().unwrap_or(&"".to_string()),
+                        def.value
+                    )
+                })
+                .intersperse("\n".to_string())
+                .collect::<String>()
+        )
     }
 }
 
@@ -401,15 +422,37 @@ impl LanguageServer for Backend {
     }
 
     async fn hover(&self, params: HoverParams) -> jsonrpc::Result<Option<Hover>> {
-        eprintln!("HOVERING!!");
-        self.client.log_message(MessageType::Info, "hoverrr").await;
+        let mut document = self
+            .documents
+            .lock()
+            .unwrap()
+            .get_mut()
+            .iter_mut()
+            .find(|document| document.uri == params.text_document_position_params.text_document.uri)
+            .unwrap()
+            .clone();
 
-        Ok(Some(Hover {
-            contents: HoverContents::Scalar(MarkedString::String(
-                "TODO: Hier komt hover informatie over translation".to_string(),
-            )),
-            range: None,
-        }))
+        let pos = document.offset_at(params.text_document_position_params.position);
+
+        match find_translation_key_by_position(&document.text, &pos) {
+            Some(translation_key) => {
+                let contents =
+                    self.get_definition_description_by_key(translation_key.as_str().to_string());
+
+                let key_range = translation_key.range();
+
+                let range = tower_lsp::lsp_types::Range::new(
+                    document.position_at(key_range.start.try_into().unwrap()),
+                    document.position_at(key_range.end.try_into().unwrap()),
+                );
+
+                Ok(Some(Hover {
+                    contents: HoverContents::Scalar(MarkedString::String(contents)),
+                    range: Some(range),
+                }))
+            }
+            None => Ok(None),
+        }
     }
 }
 
@@ -443,6 +486,38 @@ impl PartialEq for Definition {
         match &self.cleaned_key {
             Some(_) => self.cleaned_key == other.cleaned_key,
             None => self.key == other.key,
+        }
+    }
+}
+
+impl PartialEq<String> for Definition {
+    fn eq(&self, other: &String) -> bool {
+        match &self.cleaned_key {
+            Some(cleaned_key) => cleaned_key == other,
+            None => &self.key == other,
+        }
+    }
+}
+
+impl Definition {
+    fn get_flag(&self) -> Option<String> {
+        match &self.language {
+            Some(language) => {
+                let mut possible_countries = language
+                    .split("-")
+                    .map(|text| text.to_uppercase())
+                    .collect_vec();
+                possible_countries.push(language.to_uppercase());
+                possible_countries.reverse();
+
+                for country in possible_countries {
+                    if let Some(emoji) = flag(&country) {
+                        return Some(emoji);
+                    }
+                }
+                None
+            }
+            None => None,
         }
     }
 }

@@ -1,5 +1,7 @@
 // TODO: In the next version this should be replaced with an AST like Treesitter or Babel.
 
+use std::ops::Range;
+
 use itertools::Itertools;
 use regex::Regex;
 
@@ -40,13 +42,14 @@ lazy_static! {
     .unwrap();
 }
 
-fn find_translation_key_by_position(text: &String, pos: &usize) -> Option<String> {
+pub fn find_translation_key_by_position<'a>(
+    text: &'a String,
+    pos: &usize,
+) -> Option<regex::Match<'a>> {
     for groups in TRANSLATION_REGEX.captures_iter(text) {
-        eprintln!("Found match: {:?}", groups);
         let result = groups.get(1).unwrap();
-        eprintln!("result: {:?}", result);
         if result.range().contains(pos) {
-            return Some(result.as_str().to_string());
+            return Some(result);
         }
     }
     None
