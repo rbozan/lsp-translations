@@ -41,16 +41,15 @@ lazy_static! {
 }
 
 fn find_translation_key_by_position(text: &String, pos: &usize) -> Option<String> {
-    TRANSLATION_REGEX.captures(text).and_then(|groups| {
+    for groups in TRANSLATION_REGEX.captures_iter(text) {
         eprintln!("Found match: {:?}", groups);
         let result = groups.get(1).unwrap();
         eprintln!("result: {:?}", result);
         if result.range().contains(pos) {
-            Some(result.as_str().to_string())
-        } else {
-            None
+            return Some(result.as_str().to_string());
         }
-    })
+    }
+    None
 }
 
 #[path = "./tests/string_helper.rs"]

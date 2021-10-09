@@ -33,6 +33,23 @@ fn finds_translation_key_in_inline_function() {
 }
 
 #[test]
+fn finds_translation_key_on_correct_position() {
+    assert_eq!(
+        find_translation_key_by_position(
+            &r#"
+        function test() {
+            translate('first-key');
+            translate('second-key');
+        }
+        "#
+            .to_string(),
+            &90
+        ),
+        Some("second-key".to_string())
+    );
+}
+
+#[test]
 fn finds_nothing_when_out_of_range() {
     assert_eq!(
         find_translation_key_by_position(
