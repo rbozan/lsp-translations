@@ -75,3 +75,5 @@ jobs:
           path: |
             target/${{ matrix.target }}/release/lsp-translations
             target/${{ matrix.target }}/release/lsp-translations.exe
+          if-no-files-found: error
+
