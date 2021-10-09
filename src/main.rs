@@ -1,6 +1,11 @@
 #[path = "./tests/backend.rs"]
 mod tests;
 
+mod lsp_document;
+use crate::lsp_document::FullTextDocument;
+
+mod string_helper;
+
 use serde_json::Value;
 use tower_lsp::jsonrpc::{self, Error};
 use tower_lsp::lsp_types::*;
@@ -28,7 +33,7 @@ extern crate serde_regex;
 #[macro_use]
 extern crate ntest;
 
-#[cfg(test)]
+// #[cfg(test)]
 #[macro_use]
 extern crate lazy_static;
 
@@ -61,6 +66,8 @@ pub struct Backend {
     definitions: Arc<Mutex<Cell<Vec<Definition>>>>,
     #[new(value = "Arc::new(Mutex::new(Cell::new(ExtensionConfig::default())))")]
     config: Arc<Mutex<Cell<ExtensionConfig>>>,
+    #[new(value = "Arc::new(Mutex::new(Cell::new(vec![])))")]
+    documents: Arc<Mutex<Cell<Vec<FullTextDocument>>>>,
 }
 
 impl Backend {
@@ -113,13 +120,14 @@ impl Backend {
                     .filter_map(|path| path)
                     .collect::<PathBuf>()
             })
+            .filter(|path| path.is_file())
             .collect();
 
-        self.client
-            .log_message(MessageType::Info, format!("path bufs: {:?}", files))
-            .await;
+        eprintln!("path bufs: {:?}", files);
 
-        (self.read_translation(&files[0])).unwrap();
+        if files.len() > 0 {
+            (self.read_translation(&files[0])).unwrap();
+        }
     }
 
     fn read_translation(&self, path: &PathBuf) -> Result<(), Box<dyn std::error::Error>> {
@@ -251,7 +259,6 @@ impl LanguageServer for Backend {
                     .await;
 
                 self.fetch_translations(config[0].clone()).await;
-                eprintln!("hier fetch translsiontas klaar");
                 self.client
                     .log_message(
                         MessageType::Info,
@@ -303,16 +310,37 @@ impl LanguageServer for Backend {
         Ok(None)
     }
 
-    async fn did_open(&self, _: DidOpenTextDocumentParams) {
+    async fn did_open(&self, params: DidOpenTextDocumentParams) {
         self.client
             .log_message(MessageType::Info, "file opened!")
             .await;
+
+        // params.text_document.
+        self.documents
+            .lock()
+            .unwrap()
+            .get_mut()
+            .push(FullTextDocument::new(
+                params.text_document.uri,
+                params.text_document.language_id,
+                params.text_document.version.into(),
+                params.text_document.text,
+            ));
     }
 
-    async fn did_change(&self, _: DidChangeTextDocumentParams) {
+    async fn did_change(&self, params: DidChangeTextDocumentParams) {
         self.client
             .log_message(MessageType::Info, "file changed!")
             .await;
+
+        self.documents
+            .lock()
+            .unwrap()
+            .get_mut()
+            .iter_mut()
+            .find(|doc| doc.uri == params.text_document.uri)
+            .unwrap()
+            .update(params.content_changes, params.text_document.version.into());
     }
 
     async fn did_save(&self, _: DidSaveTextDocumentParams) {
@@ -372,7 +400,7 @@ impl LanguageServer for Backend {
         }
     }
 
-    async fn hover(&self, _: HoverParams) -> jsonrpc::Result<Option<Hover>> {
+    async fn hover(&self, params: HoverParams) -> jsonrpc::Result<Option<Hover>> {
         eprintln!("HOVERING!!");
         self.client.log_message(MessageType::Info, "hoverrr").await;
 

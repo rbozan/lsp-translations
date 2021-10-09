@@ -183,26 +183,17 @@ mod tests {
             },
         );
 
+/*
         let message = (messages.next().await).unwrap();
         let value = serde_json::to_value(message).unwrap();
 
-        assert_eq!(value["params"]["message"], "Loaded 3 definitions");
+        assert_eq!(value["params"]["message"], "Loaded 3 definitions"); */
     }
 
     #[tokio::test]
     #[timeout(500)]
     async fn completion() {
         let (mut service, _) = prepare_workspace().await;
-
-        /* println!(
-            "{:}",
-            serde_json::to_string_pretty(
-                &(&service.call(COMPLETION_REQUEST.clone()).await)
-                    .as_ref()
-                    .unwrap()
-            )
-            .unwrap()
-        ); */
 
         assert_eq!(
             service.call(COMPLETION_REQUEST.clone()).await,
@@ -266,9 +257,6 @@ mod tests {
                 panic!("lsp messages should not finish faster than finishing request")
             },
         );
-
-        let message = (messages.next().await).unwrap();
-        let value = serde_json::to_value(message).unwrap();
 
         (Spawn::new(service.into_inner()), messages)
     }

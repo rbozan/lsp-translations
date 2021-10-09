@@ -17,6 +17,10 @@ merge = "0.1.0"
 derive-new = "0.5"
 glob = "0.3.0"
 itertools = "0.10.1"
+# lsp-text-document = "0.2.0"
+
+# [replace]
+# "lsp-types:0.84.0" = { git = "https://github.com/gluon-lang/lsp-types.git" }
 
 [dev-dependencies]
 tower-test = "0.4.0"
