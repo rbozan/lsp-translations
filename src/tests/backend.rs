@@ -110,17 +110,14 @@ mod tests {
   "jsonrpc": "2.0",
   "result": [
     {
-      "detail": "en-us:\nThis is the body of my website.",
       "kind": 1,
       "label": "main.content.heading.body"
     },
     {
-      "detail": "en-us:\nA regular header for my content",
       "kind": 1,
       "label": "main.content.heading.title"
     },
     {
-      "detail": "en-us:\nThis title will appear in the header.",
       "kind": 1,
       "label": "main.header.title"
     }
@@ -128,6 +125,31 @@ mod tests {
   "id": 1
 }
 "#).unwrap());
+
+        static ref COMPLETION_RESOLVE_REQUEST: Incoming = serde_json::from_str(r#"{
+            "jsonrpc": "2.0",
+            "method": "completionItem/resolve",
+            "params": {
+                "label": "main.header.title",
+                "insertTextFormat": 1,
+                "kind": 1
+            },
+            "id": 1
+        }"#).unwrap();
+
+        static ref COMPLETION_RESOLVE_RESPONSE: Outgoing =  Outgoing::Response(serde_json::from_str(r#"{
+            "jsonrpc": "2.0",
+            "result": {
+                "documentation": {
+                    "kind": "markdown",
+                    "value": "flag|language|translation\n-|-|-\n🇺🇸|**en-us**|This title will appear in the header."
+                },
+                "insertTextFormat": 1,
+                "kind": 1,
+                "label": "main.header.title"
+            },
+            "id": 1
+        }"#).unwrap());
     }
 
     fn init_service() -> (Spawn<LspService>, MessageStream) {
@@ -183,7 +205,7 @@ mod tests {
             },
         );
 
-/*
+        /*
         let message = (messages.next().await).unwrap();
         let value = serde_json::to_value(message).unwrap();
 
@@ -198,6 +220,17 @@ mod tests {
         assert_eq!(
             service.call(COMPLETION_REQUEST.clone()).await,
             Ok(Some(COMPLETION_RESPONSE.clone()))
+        );
+    }
+
+    #[tokio::test]
+    #[timeout(500)]
+    async fn completion_resolve() {
+        let (mut service, _) = prepare_workspace().await;
+
+        assert_eq!(
+            service.call(COMPLETION_RESOLVE_REQUEST.clone()).await,
+            Ok(Some(COMPLETION_RESOLVE_RESPONSE.clone()))
         );
     }
 

@@ -211,7 +211,7 @@ impl Backend {
         definitions
     }
 
-    fn get_definition_description_by_key(&self, key: String) -> String {
+    fn get_definition_detail_by_key(&self, key: &String) -> String {
         format!(
             "flag|language|translation\n-|-|-\n{}",
             self.definitions
@@ -219,7 +219,7 @@ impl Backend {
                 .unwrap()
                 .get_mut()
                 .iter()
-                .filter(|definition| *definition == &key)
+                .filter(|definition| *definition == key)
                 .map(|def| {
                     format!(
                         "{}|**{}**|{}",
@@ -383,7 +383,13 @@ impl LanguageServer for Backend {
             Ok(Some(CompletionResponse::Array(
                 definitions
                     .iter()
-                    .unique_by(|definition| definition.key.to_string())
+                    .unique_by(|definition| {
+                        definition
+                            .cleaned_key
+                            .as_ref()
+                            .unwrap_or(&definition.key)
+                            .clone()
+                    })
                     .map(|definition| {
                         // TODO: Move detail to completionItem/resolve
                         let detail: String = definitions
@@ -409,7 +415,7 @@ impl LanguageServer for Backend {
                                 .unwrap_or(&definition.key)
                                 .clone(),
                             kind: Some(CompletionItemKind::Text),
-                            detail: Some(detail), // TODO: None
+                            detail: None,
                             ..Default::default()
                         }
                     })
@@ -419,6 +425,18 @@ impl LanguageServer for Backend {
             eprintln!("Gaat fout");
             Err(Error::internal_error())
         }
+    }
+
+    async fn completion_resolve(&self, params: CompletionItem) -> jsonrpc::Result<CompletionItem> {
+        let mut item = params.clone();
+        let detail = self.get_definition_detail_by_key(&item.label);
+
+        item.documentation = Some(Documentation::MarkupContent(MarkupContent {
+            kind: MarkupKind::Markdown,
+            value: detail,
+        }));
+
+        Ok(item)
     }
 
     async fn hover(&self, params: HoverParams) -> jsonrpc::Result<Option<Hover>> {
@@ -437,7 +455,7 @@ impl LanguageServer for Backend {
         match find_translation_key_by_position(&document.text, &pos) {
             Some(translation_key) => {
                 let contents =
-                    self.get_definition_description_by_key(translation_key.as_str().to_string());
+                    self.get_definition_detail_by_key(&translation_key.as_str().to_string());
 
                 let key_range = translation_key.range();
 
