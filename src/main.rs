@@ -1,13 +1,21 @@
 #[path = "./tests/backend.rs"]
+#[cfg(test)]
 mod tests;
+
+#[path = "./tests/completion.rs"]
+#[cfg(test)]
+mod tests_completion;
 
 mod lsp_document;
 use crate::lsp_document::FullTextDocument;
 
 mod string_helper;
 use crate::string_helper::find_translation_key_by_position;
-use country_emoji::{code, flag, name};
+use country_emoji::flag;
 use std::convert::TryInto;
+use std::os::unix::prelude::OsStringExt;
+use string_helper::is_editing_position;
+use string_helper::TRANSLATION_BEGIN_CHARS;
 
 use serde_json::Value;
 use tower_lsp::jsonrpc::{self, Error};
@@ -246,7 +254,13 @@ impl LanguageServer for Backend {
                 hover_provider: Some(HoverProviderCapability::Simple(true)),
                 completion_provider: Some(CompletionOptions {
                     resolve_provider: Some(true),
-                    trigger_characters: None,
+                    trigger_characters: Some(
+                        TRANSLATION_BEGIN_CHARS
+                            .to_vec()
+                            .iter()
+                            .map(|char| char.to_string())
+                            .collect(),
+                    ),
                     // trigger_characters: Some(vec!["'".to_string(), "\"".to_string()]),
                     work_done_progress_options: Default::default(),
                     all_commit_characters: None,
@@ -376,7 +390,26 @@ impl LanguageServer for Backend {
             .await;
     }
 
-    async fn completion(&self, _: CompletionParams) -> jsonrpc::Result<Option<CompletionResponse>> {
+    async fn completion(
+        &self,
+        params: CompletionParams,
+    ) -> jsonrpc::Result<Option<CompletionResponse>> {
+        let mut document = self
+            .documents
+            .lock()
+            .unwrap()
+            .get_mut()
+            .iter_mut()
+            .find(|document| document.uri == params.text_document_position.text_document.uri)
+            .unwrap()
+            .clone();
+
+        let pos = document.offset_at(params.text_document_position.position);
+
+        if !is_editing_position(&document.text, &pos) {
+            return Ok(None);
+        };
+
         if let Ok(ref mut definitions) = self.definitions.try_lock() {
             let definitions = definitions.get_mut();
 

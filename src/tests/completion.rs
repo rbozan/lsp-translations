@@ -1,15 +1,11 @@
-use tower_lsp::jsonrpc::Response;
 use tower_lsp::jsonrpc::{Incoming, Outgoing};
-
-use core::task::Poll;
 
 use std::env;
 
 mod helpers;
 use helpers::*;
 
-use futures::select;
-use futures::FutureExt;
+// use helpers;
 
 lazy_static! {
     static ref INITIALIZE_REQUEST: Incoming = serde_json::from_str(
@@ -22,10 +18,7 @@ lazy_static! {
             "jsonrpc":"2.0",
             "result": {
                 "capabilities": {
-                    "completionProvider": {
-                        "resolveProvider": true,
-                        "triggerCharacters": ["'", "\"", "`"]
-                    },
+                    "completionProvider": {"resolveProvider": true},
                     "hoverProvider": true,
                     "textDocumentSync": 2,
                     "workspace": {"workspaceFolders": {"changeNotifications": true, "supported": true}}
@@ -82,53 +75,67 @@ lazy_static! {
         .as_str()
     )
     .unwrap();
+
+    static ref COMPLETION_REQUEST: Incoming = serde_json::from_str(r#"{
+            "jsonrpc":"2.0",
+            "method":"textDocument/completion",
+            "params":{
+                "textDocument": {
+                    "uri": "file:///home/rbozan/Projects/recharge-mobile-app/backend/src/route/v1/translation.js"
+                },
+                "position": {
+                    "line": 5,
+                    "character": 0
+                },
+                "context": {
+                    "triggerKind": 1
+                }
+            },
+            "id":1
+        }"#).unwrap();
+
+    static ref COMPLETION_RESPONSE: Outgoing =  Outgoing::Response(serde_json::from_str(r#"
+{
+  "jsonrpc": "2.0",
+  "result": [
+    {
+      "kind": 1,
+      "label": "main.content.heading.body"
+    },
+    {
+      "kind": 1,
+      "label": "main.content.heading.title"
+    },
+    {
+      "kind": 1,
+      "label": "main.header.title"
+    }
+  ],
+  "id": 1
+}
+"#).unwrap());
+
+    static ref COMPLETION_RESOLVE_REQUEST: Incoming = serde_json::from_str(r#"{
+            "jsonrpc": "2.0",
+            "method": "completionItem/resolve",
+            "params": {
+                "label": "main.header.title",
+                "insertTextFormat": 1,
+                "kind": 1
+            },
+            "id": 1
+        }"#).unwrap();
 }
 
 #[tokio::test]
 #[timeout(500)]
-async fn initialize() {
-    let (mut service, _) = init_service();
+async fn completion() {
+    let (mut service, _) = prepare_workspace().await;
 
-    assert_eq!(service.poll_ready(), Poll::Ready(Ok(())));
-    assert_eq!(
-        service.call(INITIALIZE_REQUEST.clone()).await,
-        Ok(Some(INITIALIZE_RESPONSE.clone()))
-    );
-
-    let raw = r#"{"jsonrpc":"2.0","error":{"code":-32600,"message":"Invalid request"},"id":1}"#;
-    let err = Outgoing::Response(serde_json::from_str::<Response>(raw).unwrap());
-    assert_eq!(service.poll_ready(), Poll::Ready(Ok(())));
-    assert_eq!(
-        service.call(INITIALIZE_REQUEST.clone()).await,
-        Ok(Some(err))
-    );
-}
-
-#[tokio::test]
-#[timeout(500)]
-async fn send_configuration() {
-    let (mut service, mut messages) = init_service();
+    // did open text document
 
     assert_eq!(
-        service.call(INITIALIZE_REQUEST.clone()).await,
-        Ok(Some(INITIALIZE_RESPONSE.clone()))
-    );
-
-    assert_eq!(service.poll_ready(), Poll::Ready(Ok(())));
-
-    select!(
-        req = service.call(INITIALIZED_REQUEST.clone()).fuse() => {
-            assert_eq!(req.unwrap(), None);
-        },
-        () = handle_lsp_message(
-            &mut service,
-            &mut messages,
-            vec![
-                &*WORKSPACE_CONFIGURATION_REQUEST,
-                &*WORKSPACE_WORKSPACE_FOLDERS_REQUEST,
-            ],
-        ).fuse() => {
-            panic!("lsp messages should not finish faster than request")
-        },
+        service.call(COMPLETION_REQUEST.clone()).await,
+        Ok(Some(COMPLETION_RESPONSE.clone()))
     );
 }

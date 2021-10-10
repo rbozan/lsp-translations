@@ -1,15 +1,16 @@
-use tower_lsp::jsonrpc::Response;
+use tower_lsp::MessageStream;
+use tower_test::mock::Spawn;
+
 use tower_lsp::jsonrpc::{Incoming, Outgoing};
+use tower_lsp::{Client, LanguageServer, LspService, Server};
 
 use core::task::Poll;
 
-use std::env;
-
-mod helpers;
-use helpers::*;
+use crate::Backend;
 
 use futures::select;
-use futures::FutureExt;
+use futures::{FutureExt, StreamExt};
+use std::env;
 
 lazy_static! {
     static ref INITIALIZE_REQUEST: Incoming = serde_json::from_str(
@@ -84,29 +85,40 @@ lazy_static! {
     .unwrap();
 }
 
-#[tokio::test]
-#[timeout(500)]
-async fn initialize() {
-    let (mut service, _) = init_service();
-
-    assert_eq!(service.poll_ready(), Poll::Ready(Ok(())));
-    assert_eq!(
-        service.call(INITIALIZE_REQUEST.clone()).await,
-        Ok(Some(INITIALIZE_RESPONSE.clone()))
-    );
-
-    let raw = r#"{"jsonrpc":"2.0","error":{"code":-32600,"message":"Invalid request"},"id":1}"#;
-    let err = Outgoing::Response(serde_json::from_str::<Response>(raw).unwrap());
-    assert_eq!(service.poll_ready(), Poll::Ready(Ok(())));
-    assert_eq!(
-        service.call(INITIALIZE_REQUEST.clone()).await,
-        Ok(Some(err))
-    );
+pub fn init_service() -> (Spawn<LspService>, MessageStream) {
+    let (service, messages) = LspService::new(|client| Backend::new(client));
+    (Spawn::new(service), messages)
 }
 
-#[tokio::test]
-#[timeout(500)]
-async fn send_configuration() {
+pub async fn handle_lsp_message(
+    service: &mut Spawn<LspService>,
+    messages: &mut MessageStream,
+    responses: Vec<&Incoming>,
+) {
+    let mut i = 0;
+    while let Some(message) = messages.next().await {
+        match message {
+            Outgoing::Response(_) => todo!(),
+            Outgoing::Request(req) => {
+                let value = serde_json::to_value(req.clone()).unwrap();
+                if value["method"] == "window/logMessage" {
+                    println!(
+                        "[window/logMessage] {:?}",
+                        value["params"]["message"].as_str().unwrap()
+                    );
+                } else {
+                    println!("[msg request] {:?}", &req);
+
+                    let result = service.call(responses[i].clone()).await;
+                    println!("[msg response] {:?}", result);
+                    i = i + 1;
+                }
+            }
+        }
+    }
+}
+
+pub async fn prepare_workspace() -> (Spawn<LspService>, MessageStream) {
     let (mut service, mut messages) = init_service();
 
     assert_eq!(
@@ -128,7 +140,9 @@ async fn send_configuration() {
                 &*WORKSPACE_WORKSPACE_FOLDERS_REQUEST,
             ],
         ).fuse() => {
-            panic!("lsp messages should not finish faster than request")
+            panic!("lsp messages should not finish faster than finishing request")
         },
     );
+
+    (Spawn::new(service.into_inner()), messages)
 }

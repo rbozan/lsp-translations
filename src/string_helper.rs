@@ -5,14 +5,22 @@ use std::ops::Range;
 use itertools::Itertools;
 use regex::Regex;
 
+pub static TRANSLATION_BEGIN_CHARS: &[&str] = &["'", "\"", "`"];
+
+// TODO: Use TRANSLATION_BEGIN_CHARS in combination with keywords below.
 static TRANSLATION_BEGIN: &[&str] = &[
     "translate('",
     "translate(\"",
     "translate(`",
     " t('",
     " t(\"",
+    " t(`",
     "(t('",
     "(t(\"",
+    "(t(`",
+    "{t('",
+    "{t(\"",
+    "{t(`",
 ];
 
 static TRANSLATION_END: &[&str] = &["'", "\"", "`"];
@@ -40,6 +48,21 @@ lazy_static! {
         .as_str()
     )
     .unwrap();
+    static ref TRANSLATION_EDITING_REGEX: Regex = Regex::new(
+        format!(
+            "{}(.*?){}",
+            *TRANSLATION_BEGIN_GROUP,
+            format!(
+                "(?m:{}|$)",
+                TRANSLATION_END
+                    .iter()
+                    .map(|key| regex::escape(key))
+                    .join("|")
+            )
+        )
+        .as_str()
+    )
+    .unwrap();
 }
 
 pub fn find_translation_key_by_position<'a>(
@@ -53,6 +76,16 @@ pub fn find_translation_key_by_position<'a>(
         }
     }
     None
+}
+
+pub fn is_editing_position(text: &String, pos: &usize) -> bool {
+    for groups in TRANSLATION_EDITING_REGEX.captures_iter(text) {
+        let result = groups.get(1).unwrap();
+        if result.range().contains(pos) || &result.range().start == pos {
+            return true;
+        }
+    }
+    false
 }
 
 #[path = "./tests/string_helper.rs"]
