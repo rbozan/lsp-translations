@@ -241,7 +241,7 @@ impl LanguageServer for Backend {
             server_info: None,
             capabilities: ServerCapabilities {
                 text_document_sync: Some(TextDocumentSyncCapability::Kind(
-                    TextDocumentSyncKind::Full,
+                    TextDocumentSyncKind::Incremental,
                 )),
                 hover_provider: Some(HoverProviderCapability::Simple(true)),
                 completion_provider: Some(CompletionOptions {
@@ -390,34 +390,15 @@ impl LanguageServer for Backend {
                             .unwrap_or(&definition.key)
                             .clone()
                     })
-                    .map(|definition| {
-                        // TODO: Move detail to completionItem/resolve
-                        let detail: String = definitions
-                            .iter()
-                            .filter(|def| *def == definition)
-                            .map(|def| {
-                                format!(
-                                    "{}{}",
-                                    def.language
-                                        .as_ref()
-                                        .and_then(|lang| Some(lang.to_owned() + ":\n"))
-                                        .unwrap_or("".to_string()),
-                                    def.value
-                                )
-                            })
-                            .intersperse("\n".to_string())
-                            .collect();
-
-                        CompletionItem {
-                            label: definition
-                                .cleaned_key
-                                .as_ref()
-                                .unwrap_or(&definition.key)
-                                .clone(),
-                            kind: Some(CompletionItemKind::Text),
-                            detail: None,
-                            ..Default::default()
-                        }
+                    .map(|definition| CompletionItem {
+                        label: definition
+                            .cleaned_key
+                            .as_ref()
+                            .unwrap_or(&definition.key)
+                            .clone(),
+                        kind: Some(CompletionItemKind::Text),
+                        detail: None,
+                        ..Default::default()
                     })
                     .collect(),
             )))
