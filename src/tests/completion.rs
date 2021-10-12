@@ -76,16 +76,30 @@ lazy_static! {
     )
     .unwrap();
 
+    static ref DID_OPEN_REQUEST: Incoming = serde_json::from_str(r#"{
+            "jsonrpc":"2.0",
+            "method":"textDocument/didOpen",
+            "params":{
+                "textDocument": {
+                    "uri": "file:///somefile.js",
+                    "languageId": "javascript",
+                    "version": 1,
+                    "text": "translate('')"
+                }
+            },
+            "id":1
+        }"#).unwrap();
+
     static ref COMPLETION_REQUEST: Incoming = serde_json::from_str(r#"{
             "jsonrpc":"2.0",
             "method":"textDocument/completion",
             "params":{
                 "textDocument": {
-                    "uri": "file:///home/rbozan/Projects/recharge-mobile-app/backend/src/route/v1/translation.js"
+                    "uri": "file:///somefile.js"
                 },
                 "position": {
-                    "line": 5,
-                    "character": 0
+                    "line": 0,
+                    "character": 11
                 },
                 "context": {
                     "triggerKind": 1
@@ -133,6 +147,10 @@ async fn completion() {
     let (mut service, _) = prepare_workspace().await;
 
     // did open text document
+    assert_eq!(
+        service.call(DID_OPEN_REQUEST.clone()).await,
+        Ok(None)
+    );
 
     assert_eq!(
         service.call(COMPLETION_REQUEST.clone()).await,
