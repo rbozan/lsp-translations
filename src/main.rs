@@ -13,7 +13,6 @@ mod string_helper;
 use crate::string_helper::find_translation_key_by_position;
 use country_emoji::flag;
 use std::convert::TryInto;
-use std::os::unix::prelude::OsStringExt;
 use string_helper::is_editing_position;
 use string_helper::TRANSLATION_BEGIN_CHARS;
 
