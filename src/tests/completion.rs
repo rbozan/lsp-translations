@@ -146,7 +146,6 @@ lazy_static! {
 async fn completion() {
     let (mut service, _) = prepare_workspace().await;
 
-    // did open text document
     assert_eq!(
         service.call(DID_OPEN_REQUEST.clone()).await,
         Ok(None)
