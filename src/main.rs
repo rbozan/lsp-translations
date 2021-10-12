@@ -103,7 +103,7 @@ impl Backend {
                     .translation_files
                     .iter()
                     .filter_map(|glob_pattern_setting| {
-                        match Path::new(&folder.uri.path())
+                        match &folder.uri.to_file_path().unwrap()
                             .join(glob_pattern_setting)
                             .to_str()
                         {
