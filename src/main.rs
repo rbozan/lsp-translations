@@ -135,8 +135,9 @@ impl Backend {
 
         eprintln!("path bufs: {:?}", files);
 
-        if files.len() > 0 {
-            (self.read_translation(&files[0])).unwrap();
+        self.definitions.lock().unwrap().set(vec![]);
+        for file in &files {
+            (self.read_translation(file)).unwrap();
         }
     }
 
@@ -146,9 +147,10 @@ impl Backend {
 
         let value: Value = serde_json::from_reader(reader)?;
 
-        let new_definitions = self.parse_translation_structure(&value, "".to_string());
+        let mut new_definitions = self.parse_translation_structure(&value, "".to_string());
 
-        let definitions = self.definitions.lock().unwrap();
+        let mut definitions = self.definitions.lock().unwrap();
+        new_definitions.append(definitions.get_mut());
         definitions.set(new_definitions);
 
         Ok(())
