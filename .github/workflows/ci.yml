@@ -125,5 +125,5 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           files: |
-            {{steps.download.outputs.download-path}}/*
+            ${{steps.download.outputs.download-path}}/*
           fail_on_unmatched_files: true
