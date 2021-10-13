@@ -113,9 +113,7 @@ jobs:
         uses: actions/upload-artifact@v2
         with:
           name: ${{ matrix.target }}
-          path: |
-            target/${{ matrix.target }}/release/lsp-translations
-            target/${{ matrix.target }}/release/lsp-translations.exe
+          path: ${{ matrix.target }}.tar
           if-no-files-found: error
 
   release:
