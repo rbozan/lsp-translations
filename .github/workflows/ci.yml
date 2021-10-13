@@ -47,7 +47,7 @@ jobs:
             # i686-apple-darwin,
             # x86_64-apple-darwin,
 
-            i686-pc-windows-gnu,
+            i686-pc-windows-msvc,
             x86_64-pc-windows-gnu,
 
             aarch64-unknown-linux-musl,
@@ -57,7 +57,7 @@ jobs:
             arm-unknown-linux-musleabi,
           ]
         include:
-          - target: i686-pc-windows-gnu
+          - target: i686-pc-windows-msvc
             os: windows-latest
           # - target: aarch64-apple-darwin
           #   os: macos-latest
