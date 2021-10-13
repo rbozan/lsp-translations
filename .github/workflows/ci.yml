@@ -76,6 +76,7 @@ jobs:
           profile: minimal
           target: ${{ matrix.target }}
 
+      # Code from https://github.com/prisma/prisma-engines/blob/master/.github/workflows/build-apple-silicon.yml#L42-L56
       - if: matrix.target == 'aarch64-apple-darwin'
         run: xcodebuild -showsdks
 
