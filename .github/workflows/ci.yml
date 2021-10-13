@@ -37,7 +37,7 @@ jobs:
   build:
     name: Build
     needs: [test]
-    runs-on: ubuntu-latest
+    runs-on: ${{matrix.os || 'ubuntu-latest'}}
     strategy:
       matrix:
         target: [
@@ -54,6 +54,9 @@ jobs:
             armv7-unknown-linux-musleabihf,
             arm-unknown-linux-musleabi,
           ]
+        include:
+          - target: i686-pc-windows-gnu
+            os: windows
 
     steps:
       - uses: actions/checkout@v2
@@ -76,4 +79,3 @@ jobs:
             target/${{ matrix.target }}/release/lsp-translations
             target/${{ matrix.target }}/release/lsp-translations.exe
           if-no-files-found: error
-

@@ -28,5 +28,3 @@ country-emoji = "0.1.2"
 tower-test = "0.4.0"
 ntest = "0.7.3"
 
-[target.i686-pc-windows-gnu]
-image = "rustembedded/cross:i686-pc-windows-gnu"
