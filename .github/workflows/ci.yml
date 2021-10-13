@@ -78,7 +78,7 @@ jobs:
         with:
           command: build
           args: --release --target=${{ matrix.target }}
-          use-cross: true
+          use-cross: ${{!matrix.os}}
       - name: Upload artifacts
         uses: actions/upload-artifact@v2
         with:
