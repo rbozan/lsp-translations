@@ -41,7 +41,8 @@ lazy_static! {
         r#"{"jsonrpc":"2.0","result": [
     {
         "translationFiles": [
-            "./fixtures/*.json"
+            "./fixtures/*.json",
+            ".\\fixtures\\*.json"
         ],
         "fileName": {
             "details": "testdsddasdasdddsad"

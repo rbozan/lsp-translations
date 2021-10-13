@@ -13,7 +13,6 @@ mod string_helper;
 use crate::string_helper::find_translation_key_by_position;
 use country_emoji::flag;
 use std::convert::TryInto;
-use std::os::unix::prelude::OsStringExt;
 use string_helper::is_editing_position;
 use string_helper::TRANSLATION_BEGIN_CHARS;
 
@@ -104,7 +103,7 @@ impl Backend {
                     .translation_files
                     .iter()
                     .filter_map(|glob_pattern_setting| {
-                        match Path::new(&folder.uri.path())
+                        match &folder.uri.to_file_path().unwrap()
                             .join(glob_pattern_setting)
                             .to_str()
                         {
@@ -136,8 +135,9 @@ impl Backend {
 
         eprintln!("path bufs: {:?}", files);
 
-        if files.len() > 0 {
-            (self.read_translation(&files[0])).unwrap();
+        self.definitions.lock().unwrap().set(vec![]);
+        for file in &files {
+            (self.read_translation(file)).unwrap();
         }
     }
 
@@ -147,9 +147,10 @@ impl Backend {
 
         let value: Value = serde_json::from_reader(reader)?;
 
-        let new_definitions = self.parse_translation_structure(&value, "".to_string());
+        let mut new_definitions = self.parse_translation_structure(&value, "".to_string());
 
-        let definitions = self.definitions.lock().unwrap();
+        let mut definitions = self.definitions.lock().unwrap();
+        new_definitions.append(definitions.get_mut());
         definitions.set(new_definitions);
 
         Ok(())
