@@ -38,15 +38,13 @@ jobs:
           args: --target=${{matrix.target}}
           use-cross: ${{!matrix.os}}
 
-
   build:
     name: Build
     needs: [test]
     runs-on: ${{matrix.os || 'ubuntu-latest'}}
     strategy:
       matrix:
-        target:
-          [
+        target: [
             aarch64-apple-darwin,
             # i686-apple-darwin,
             x86_64-apple-darwin,
@@ -77,6 +75,26 @@ jobs:
           toolchain: stable
           profile: minimal
           target: ${{ matrix.target }}
+
+      - if: matrix.target == 'aarch64-apple-darwin'
+        run: xcodebuild -showsdks
+
+      # Remove Xcode Command Line Tools so old version can not be used in build via https://github.com/prisma/prisma/issues/5245#issuecomment-864356168
+      - if: matrix.target == 'aarch64-apple-darwin'
+        run: sudo rm -Rf /Library/Developer/CommandLineTools/SDKs/*;
+
+      # Activate newest available Xcode
+      - if: matrix.target == 'aarch64-apple-darwin'
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      # Build with fancy params via https://github.com/shepmaster/rust/blob/silicon/silicon/README.md
+      - if: matrix.target == 'aarch64-apple-darwin'
+        run: |
+          SDKROOT=$(xcrun -sdk macosx11.1 --show-sdk-path)
+          MACOSX_DEPLOYMENT_TARGET=$(xcrun -sdk macosx11.1 --show-sdk-platform-version)
+
       - name: Build
         uses: actions-rs/cargo@v1
         with:
