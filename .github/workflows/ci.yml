@@ -102,6 +102,13 @@ jobs:
           command: build
           args: --release --target=${{ matrix.target }}
           use-cross: ${{!matrix.os}}
+
+      - if: matrix.target == 'i686-pc-windows-msvc' || matrix.target == 'x86_64-pc-windows-gnu'
+        name: 'Tar files (Windows)'
+        run: tar -cvf ${{ matrix.target }}.tar -C ./target/${{ matrix.target }}/release ./lsp-translations.exe
+      - if: matrix.target != 'i686-pc-windows-msvc' && matrix.target != 'x86_64-pc-windows-gnu'
+        name: 'Tar files (Linux and MacOS)'
+        run: tar -cvf ${{ matrix.target }}.tar -C ./target/${{ matrix.target }}/release ./lsp-translations
       - name: Upload artifacts
         uses: actions/upload-artifact@v2
         with:
@@ -125,5 +132,5 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           files: |
-            ${{steps.download.outputs.download-path}}/*
+            ${{steps.download.outputs.download-path}}/*/*.tar
           fail_on_unmatched_files: true
