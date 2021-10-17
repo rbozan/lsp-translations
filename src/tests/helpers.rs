@@ -2,7 +2,7 @@ use tower_lsp::MessageStream;
 use tower_test::mock::Spawn;
 
 use tower_lsp::jsonrpc::{Incoming, Outgoing};
-use tower_lsp::{Client, LanguageServer, LspService, Server};
+use tower_lsp::LspService;
 
 use core::task::Poll;
 
@@ -87,7 +87,7 @@ lazy_static! {
 }
 
 pub fn init_service() -> (Spawn<LspService>, MessageStream) {
-    let (service, messages) = LspService::new(|client| Backend::new(client));
+    let (service, messages) = LspService::new(Backend::new);
     (Spawn::new(service), messages)
 }
 
@@ -112,7 +112,7 @@ pub async fn handle_lsp_message(
 
                     let result = service.call(responses[i].clone()).await;
                     println!("[msg response] {:?}", result);
-                    i = i + 1;
+                    i += 1;
                 }
             }
         }

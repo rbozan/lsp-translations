@@ -147,10 +147,7 @@ lazy_static! {
 async fn completion() {
     let (mut service, _) = prepare_workspace().await;
 
-    assert_eq!(
-        service.call(DID_OPEN_REQUEST.clone()).await,
-        Ok(None)
-    );
+    assert_eq!(service.call(DID_OPEN_REQUEST.clone()).await, Ok(None));
 
     assert_eq!(
         service.call(COMPLETION_REQUEST.clone()).await,

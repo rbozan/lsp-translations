@@ -1,7 +1,5 @@
 // TODO: In the next version this should be replaced with an AST like Treesitter or Babel.
 
-use std::ops::Range;
-
 use itertools::Itertools;
 use regex::Regex;
 

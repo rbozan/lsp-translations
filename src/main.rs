@@ -17,6 +17,7 @@ mod string_helper;
 use crate::string_helper::find_translation_key_by_position;
 use country_emoji::flag;
 use std::convert::TryInto;
+use std::path::Path;
 use string_helper::is_editing_position;
 use string_helper::TRANSLATION_BEGIN_CHARS;
 
@@ -30,7 +31,7 @@ use serde::Deserialize;
 use std::cell::Cell;
 use std::fs::File;
 use std::io::BufReader;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use itertools::Itertools;
@@ -136,7 +137,7 @@ impl Backend {
                         }
                     })
                     .flatten()
-                    .filter_map(|path| path)
+                    .flatten()
                     .collect::<PathBuf>()
             })
             .filter(|path| path.is_file())
@@ -151,7 +152,7 @@ impl Backend {
     }
 
     /// Reads the translations from a single file and adds them to the `definitions`
-    fn read_translation(&self, path: &PathBuf) -> Result<(), Box<dyn std::error::Error>> {
+    fn read_translation(&self, path: &Path) -> Result<(), Box<dyn std::error::Error>> {
         let file = File::open(path)?;
         let reader = BufReader::new(file);
 
@@ -192,10 +193,9 @@ impl Backend {
                     .filter
                     .as_ref()
                     .and_then(|key_filter_regex| {
-                        key_filter_regex.captures(&json_path).and_then(|cap| {
-                            cap.get(1)
-                                .and_then(|group| Some(group.as_str().to_string()))
-                        })
+                        key_filter_regex
+                            .captures(&json_path)
+                            .and_then(|cap| cap.get(1).map(|group| group.as_str().to_string()))
                     });
 
                 let language = &self
@@ -209,7 +209,7 @@ impl Backend {
                     .and_then(|key_details_regex| {
                         key_details_regex.captures(&json_path).and_then(|cap| {
                             cap.name("language")
-                                .and_then(|matches| Some(matches.as_str().to_string()))
+                                .map(|matches| matches.as_str().to_string())
                         })
                     });
 
@@ -248,7 +248,7 @@ impl Backend {
             .intersperse("\n".to_string())
             .collect::<String>();
 
-        if definitions.len() == 0 {
+        if definitions.is_empty() {
             return None;
         };
 
@@ -387,7 +387,11 @@ impl LanguageServer for Backend {
             .log_message(MessageType::Info, "file closed!")
             .await;
 
-        self.documents.lock().unwrap().get_mut().retain(|document| document.uri != params.text_document.uri)
+        self.documents
+            .lock()
+            .unwrap()
+            .get_mut()
+            .retain(|document| document.uri != params.text_document.uri)
     }
 
     async fn completion(
@@ -442,7 +446,7 @@ impl LanguageServer for Backend {
     }
 
     async fn completion_resolve(&self, params: CompletionItem) -> jsonrpc::Result<CompletionItem> {
-        let mut item = params.clone();
+        let mut item = params;
         if let Some(detail) = self.get_definition_detail_by_key(&item.label) {
             item.documentation = Some(Documentation::MarkupContent(MarkupContent {
                 kind: MarkupKind::Markdown,
@@ -495,7 +499,7 @@ async fn main() {
     let stdin = tokio::io::stdin();
     let stdout = tokio::io::stdout();
 
-    let (service, messages) = LspService::new(|client| Backend::new(client));
+    let (service, messages) = LspService::new(Backend::new);
     Server::new(stdin, stdout)
         .interleave(messages)
         .serve(service)
@@ -538,7 +542,7 @@ impl Definition {
         match &self.language {
             Some(language) => {
                 let mut possible_countries = language
-                    .split("-")
+                    .split('-')
                     .map(|text| text.to_uppercase())
                     .collect_vec();
                 possible_countries.push(language.to_uppercase());
