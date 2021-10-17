@@ -85,6 +85,8 @@ pub struct Backend {
 }
 
 impl Backend {
+    /// Figures out which translation files exists on the system of the user
+    /// and calls `read_translation` to append them to the definitions
     async fn fetch_translations(&self, config_value: Value) {
         // TODO: Move setting config to other function
         let config: ExtensionConfig = serde_json::from_value(config_value).unwrap();
@@ -148,6 +150,7 @@ impl Backend {
         }
     }
 
+    /// Reads the translations from a single file and adds them to the `definitions`
     fn read_translation(&self, path: &PathBuf) -> Result<(), Box<dyn std::error::Error>> {
         let file = File::open(path)?;
         let reader = BufReader::new(file);
@@ -163,11 +166,9 @@ impl Backend {
         Ok(())
     }
 
+    /// Recursively goes through all the keys and convert them to `Vec<Definition>`
     fn parse_translation_structure(&self, value: &Value, json_path: String) -> Vec<Definition> {
         let mut definitions = vec![];
-
-        // println!("parse_translation_structure {:?}", value);
-        //
 
         match value {
             Value::Object(values) => values.iter().for_each(|(key, value)| {
@@ -227,6 +228,7 @@ impl Backend {
         definitions
     }
 
+    /// Gets details about a single definition
     fn get_definition_detail_by_key(&self, key: &String) -> Option<String> {
         let definitions = self
             .definitions
@@ -273,7 +275,6 @@ impl LanguageServer for Backend {
                             .map(|char| char.to_string())
                             .collect(),
                     ),
-                    // trigger_characters: Some(vec!["'".to_string(), "\"".to_string()]),
                     work_done_progress_options: Default::default(),
                     all_commit_characters: None,
                 }),
