@@ -6,6 +6,10 @@ mod tests;
 #[cfg(test)]
 mod tests_completion;
 
+#[path = "./tests/hover.rs"]
+#[cfg(test)]
+mod tests_hover;
+
 mod lsp_document;
 use crate::lsp_document::FullTextDocument;
 
@@ -103,7 +107,10 @@ impl Backend {
                     .translation_files
                     .iter()
                     .filter_map(|glob_pattern_setting| {
-                        match &folder.uri.to_file_path().unwrap()
+                        match &folder
+                            .uri
+                            .to_file_path()
+                            .unwrap()
                             .join(glob_pattern_setting)
                             .to_str()
                         {
@@ -220,26 +227,30 @@ impl Backend {
         definitions
     }
 
-    fn get_definition_detail_by_key(&self, key: &String) -> String {
-        format!(
-            "flag|language|translation\n-|-|-\n{}",
-            self.definitions
-                .lock()
-                .unwrap()
-                .get_mut()
-                .iter()
-                .filter(|definition| *definition == key)
-                .map(|def| {
-                    format!(
-                        "{}|**{}**|{}",
-                        def.get_flag().unwrap_or_default(),
-                        def.language.as_ref().unwrap_or(&"".to_string()),
-                        def.value
-                    )
-                })
-                .intersperse("\n".to_string())
-                .collect::<String>()
-        )
+    fn get_definition_detail_by_key(&self, key: &String) -> Option<String> {
+        let definitions = self
+            .definitions
+            .lock()
+            .unwrap()
+            .get_mut()
+            .iter()
+            .filter(|definition| *definition == key)
+            .map(|def| {
+                format!(
+                    "{}|**{}**|{}",
+                    def.get_flag().unwrap_or_default(),
+                    def.language.as_ref().unwrap_or(&"".to_string()),
+                    def.value
+                )
+            })
+            .intersperse("\n".to_string())
+            .collect::<String>();
+
+        if definitions.len() == 0 {
+            return None;
+        };
+
+        Some(format!("flag|language|translation\n-|-|-\n{}", definitions))
     }
 }
 
@@ -444,12 +455,12 @@ impl LanguageServer for Backend {
 
     async fn completion_resolve(&self, params: CompletionItem) -> jsonrpc::Result<CompletionItem> {
         let mut item = params.clone();
-        let detail = self.get_definition_detail_by_key(&item.label);
-
-        item.documentation = Some(Documentation::MarkupContent(MarkupContent {
-            kind: MarkupKind::Markdown,
-            value: detail,
-        }));
+        if let Some(detail) = self.get_definition_detail_by_key(&item.label) {
+            item.documentation = Some(Documentation::MarkupContent(MarkupContent {
+                kind: MarkupKind::Markdown,
+                value: detail,
+            }));
+        }
 
         Ok(item)
     }
@@ -469,20 +480,22 @@ impl LanguageServer for Backend {
 
         match find_translation_key_by_position(&document.text, &pos) {
             Some(translation_key) => {
-                let contents =
-                    self.get_definition_detail_by_key(&translation_key.as_str().to_string());
+                match self.get_definition_detail_by_key(&translation_key.as_str().to_string()) {
+                    Some(contents) => {
+                        let key_range = translation_key.range();
 
-                let key_range = translation_key.range();
+                        let range = tower_lsp::lsp_types::Range::new(
+                            document.position_at(key_range.start.try_into().unwrap()),
+                            document.position_at(key_range.end.try_into().unwrap()),
+                        );
 
-                let range = tower_lsp::lsp_types::Range::new(
-                    document.position_at(key_range.start.try_into().unwrap()),
-                    document.position_at(key_range.end.try_into().unwrap()),
-                );
-
-                Ok(Some(Hover {
-                    contents: HoverContents::Scalar(MarkedString::String(contents)),
-                    range: Some(range),
-                }))
+                        Ok(Some(Hover {
+                            contents: HoverContents::Scalar(MarkedString::String(contents)),
+                            range: Some(range),
+                        }))
+                    }
+                    None => Ok(None),
+                }
             }
             None => Ok(None),
         }
