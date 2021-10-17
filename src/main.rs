@@ -254,6 +254,37 @@ impl Backend {
 
         Some(format!("flag|language|translation\n-|-|-\n{}", definitions))
     }
+
+    /// Fetches configuration
+    async fn read_config(&self) {
+        let config = self
+            .client
+            .configuration(vec![ConfigurationItem {
+                scope_uri: None,
+                section: Some("lsp-translations".to_string()),
+            }])
+            .await;
+
+        match config {
+            Ok(config) => {
+                self.client
+                    .log_message(MessageType::Log, format!("config received {:?}", config))
+                    .await;
+
+                self.fetch_translations(config[0].clone()).await;
+                self.client
+                    .log_message(
+                        MessageType::Info,
+                        format!(
+                            "Loaded {:} definitions",
+                            self.definitions.lock().unwrap().get_mut().len()
+                        ),
+                    )
+                    .await;
+            }
+            Err(err) => self.client.log_message(MessageType::Error, err).await,
+        }
+    }
 }
 
 #[tower_lsp::async_trait]
@@ -291,34 +322,7 @@ impl LanguageServer for Backend {
     }
 
     async fn initialized(&self, _: InitializedParams) {
-        // Read configuration
-        let config = self
-            .client
-            .configuration(vec![ConfigurationItem {
-                scope_uri: None,
-                section: Some("lsp-translations".to_string()),
-            }])
-            .await;
-
-        match config {
-            Ok(config) => {
-                self.client
-                    .log_message(MessageType::Log, format!("config received {:?}", config))
-                    .await;
-
-                self.fetch_translations(config[0].clone()).await;
-                self.client
-                    .log_message(
-                        MessageType::Info,
-                        format!(
-                            "Loaded {:} definitions",
-                            self.definitions.lock().unwrap().get_mut().len()
-                        ),
-                    )
-                    .await;
-            }
-            Err(err) => self.client.log_message(MessageType::Error, err).await,
-        }
+        self.read_config().await;
     }
 
     async fn shutdown(&self) -> jsonrpc::Result<()> {
@@ -330,12 +334,18 @@ impl LanguageServer for Backend {
         self.client
             .log_message(MessageType::Info, "workspace folders changed!")
             .await;
+
+        // TODO: Do not refetch configuration
+        self.read_config().await;
     }
 
     async fn did_change_configuration(&self, _: DidChangeConfigurationParams) {
         self.client
             .log_message(MessageType::Info, "configuration changed!")
             .await;
+
+        // TODO: Do not refetch configuration but use params
+        self.read_config().await;
     }
 
     async fn did_change_watched_files(&self, _: DidChangeWatchedFilesParams) {
@@ -344,26 +354,11 @@ impl LanguageServer for Backend {
             .await;
     }
 
-    async fn execute_command(&self, _: ExecuteCommandParams) -> jsonrpc::Result<Option<Value>> {
-        self.client
-            .log_message(MessageType::Info, "command executed!")
-            .await;
-
-        match self.client.apply_edit(WorkspaceEdit::default()).await {
-            Ok(res) if res.applied => self.client.log_message(MessageType::Info, "applied").await,
-            Ok(_) => self.client.log_message(MessageType::Info, "rejected").await,
-            Err(err) => self.client.log_message(MessageType::Error, err).await,
-        }
-
-        Ok(None)
-    }
-
     async fn did_open(&self, params: DidOpenTextDocumentParams) {
         self.client
             .log_message(MessageType::Info, "file opened!")
             .await;
 
-        // params.text_document.
         self.documents
             .lock()
             .unwrap()
@@ -377,10 +372,6 @@ impl LanguageServer for Backend {
     }
 
     async fn did_change(&self, params: DidChangeTextDocumentParams) {
-        self.client
-            .log_message(MessageType::Info, "file changed!")
-            .await;
-
         self.documents
             .lock()
             .unwrap()
@@ -391,16 +382,12 @@ impl LanguageServer for Backend {
             .update(params.content_changes, params.text_document.version.into());
     }
 
-    async fn did_save(&self, _: DidSaveTextDocumentParams) {
-        self.client
-            .log_message(MessageType::Info, "file saved!")
-            .await;
-    }
-
-    async fn did_close(&self, _: DidCloseTextDocumentParams) {
+    async fn did_close(&self, params: DidCloseTextDocumentParams) {
         self.client
             .log_message(MessageType::Info, "file closed!")
             .await;
+
+        self.documents.lock().unwrap().get_mut().retain(|document| document.uri != params.text_document.uri)
     }
 
     async fn completion(
