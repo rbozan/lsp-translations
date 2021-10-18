@@ -194,7 +194,7 @@ impl Backend {
                     .as_ref()
                     .and_then(|key_filter_regex| {
                         key_filter_regex
-                            .captures(&json_path)
+                            .captures(&json_path.replace("\n", ""))
                             .and_then(|cap| cap.get(1).map(|group| group.as_str().to_string()))
                     });
 
