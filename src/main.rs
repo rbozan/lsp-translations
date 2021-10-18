@@ -18,6 +18,7 @@ use crate::string_helper::find_translation_key_by_position;
 use country_emoji::flag;
 use std::convert::TryInto;
 use std::path::Path;
+use string_helper::get_editing_range;
 use string_helper::is_editing_position;
 use string_helper::TRANSLATION_BEGIN_CHARS;
 
@@ -410,12 +411,14 @@ impl LanguageServer for Backend {
 
         let pos = document.offset_at(params.text_document_position.position);
 
-        if !is_editing_position(&document.text, &pos) {
+        let range_result = get_editing_range(&document.text, &pos);
+        if !range_result.is_some() {
             return Ok(None);
         };
 
         if let Ok(ref mut definitions) = self.definitions.try_lock() {
             let definitions = definitions.get_mut();
+            let range = range_result.unwrap();
 
             Ok(Some(CompletionResponse::Array(
                 definitions
@@ -435,6 +438,17 @@ impl LanguageServer for Backend {
                             .clone(),
                         kind: Some(CompletionItemKind::Text),
                         detail: None,
+                        text_edit: Some(CompletionTextEdit::Edit(TextEdit {
+                            range: tower_lsp::lsp_types::Range::new(
+                                document.position_at(range.start.try_into().unwrap()),
+                                document.position_at(range.end.try_into().unwrap()),
+                            ),
+                            new_text: definition
+                                .cleaned_key
+                                .as_ref()
+                                .unwrap_or(&definition.key)
+                                .clone(),
+                        })),
                         ..Default::default()
                     })
                     .collect(),
