@@ -1,5 +1,7 @@
 // TODO: In the next version this should be replaced with an AST like Treesitter or Babel.
 
+use std::ops::Range;
+
 use itertools::Itertools;
 use regex::Regex;
 
@@ -76,14 +78,19 @@ pub fn find_translation_key_by_position<'a>(
     None
 }
 
-pub fn is_editing_position(text: &String, pos: &usize) -> bool {
+pub fn get_editing_range(text: &String, pos: &usize) -> Option<Range<usize>> {
     for groups in TRANSLATION_EDITING_REGEX.captures_iter(text) {
         let result = groups.get(1).unwrap();
-        if result.range().contains(pos) || &result.range().start == pos {
-            return true;
+        let range = result.range();
+        if range.contains(pos) || &range.start == pos {
+            return Some(range);
         }
     }
-    false
+    None
+}
+
+pub fn is_editing_position(text: &String, pos: &usize) -> bool {
+    get_editing_range(text, pos).is_some()
 }
 
 #[path = "./tests/string_helper.rs"]
