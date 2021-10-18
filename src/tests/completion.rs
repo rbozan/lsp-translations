@@ -115,15 +115,37 @@ lazy_static! {
   "result": [
     {
       "kind": 1,
-      "label": "main.content.heading.body"
+      "label": "main.content.heading.body",
+      "textEdit": {
+          "newText": "main.content.heading.body",
+          "range": {
+              "start": { "character": 11, "line": 0 },
+              "end": { "character": 11, "line": 0 }
+          }
+      }
     },
     {
       "kind": 1,
-      "label": "main.content.heading.title"
+      "label": "main.content.heading.title",
+      "textEdit": {
+          "newText": "main.content.heading.title",
+          "range": {
+              "start": { "character": 11, "line": 0 },
+              "end": { "character": 11, "line": 0 }
+          }
+      }
     },
     {
       "kind": 1,
-      "label": "main.header.title"
+      "label": "main.header.title",
+      "textEdit": {
+          "newText": "main.header.title",
+          "range": {
+              "start": { "character": 11, "line": 0 },
+              "end": { "character": 11, "line": 0 }
+          }
+      }
+
     }
   ],
   "id": 1
