@@ -82,7 +82,7 @@ pub fn get_editing_range(text: &String, pos: &usize) -> Option<Range<usize>> {
     for groups in TRANSLATION_EDITING_REGEX.captures_iter(text) {
         let result = groups.get(1).unwrap();
         let range = result.range();
-        if range.contains(pos) || &range.start == pos {
+        if range.contains(pos) || &range.start == pos || &range.end == pos {
             return Some(range);
         }
     }
