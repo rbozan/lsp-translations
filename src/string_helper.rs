@@ -6,6 +6,7 @@ use itertools::Itertools;
 use regex::Regex;
 
 pub static TRANSLATION_BEGIN_CHARS: &[&str] = &["'", "\"", "`"];
+pub static TRANSLATION_KEY_DIVIDER: &str = ".";
 
 // TODO: Use TRANSLATION_BEGIN_CHARS in combination with keywords below.
 static TRANSLATION_BEGIN: &[&str] = &[

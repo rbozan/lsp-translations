@@ -21,6 +21,7 @@ use std::path::Path;
 use string_helper::get_editing_range;
 use string_helper::is_editing_position;
 use string_helper::TRANSLATION_BEGIN_CHARS;
+use string_helper::TRANSLATION_KEY_DIVIDER;
 
 use serde_json::Value;
 use tower_lsp::jsonrpc::{self, Error};
@@ -317,6 +318,14 @@ impl Backend {
 #[tower_lsp::async_trait]
 impl LanguageServer for Backend {
     async fn initialize(&self, _: InitializeParams) -> jsonrpc::Result<InitializeResult> {
+        let mut trigger_characters = TRANSLATION_BEGIN_CHARS
+            .to_vec()
+            .iter()
+            .map(|char| char.to_string())
+            .collect::<Vec<String>>();
+
+        trigger_characters.push(TRANSLATION_KEY_DIVIDER.to_string());
+
         Ok(InitializeResult {
             server_info: None,
             capabilities: ServerCapabilities {
@@ -326,13 +335,7 @@ impl LanguageServer for Backend {
                 hover_provider: Some(HoverProviderCapability::Simple(true)),
                 completion_provider: Some(CompletionOptions {
                     resolve_provider: Some(true),
-                    trigger_characters: Some(
-                        TRANSLATION_BEGIN_CHARS
-                            .to_vec()
-                            .iter()
-                            .map(|char| char.to_string())
-                            .collect(),
-                    ),
+                    trigger_characters: Some(trigger_characters),
                     work_done_progress_options: Default::default(),
                     all_commit_characters: None,
                 }),

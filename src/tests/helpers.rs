@@ -25,7 +25,7 @@ lazy_static! {
                 "capabilities": {
                     "completionProvider": {
                         "resolveProvider": true,
-                        "triggerCharacters": ["'", "\"", "`"]
+                        "triggerCharacters": ["'", "\"", "`", "."]
                     },
                     "hoverProvider": true,
                     "textDocumentSync": 2,
