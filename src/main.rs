@@ -147,6 +147,8 @@ impl Backend {
 
         eprintln!("path bufs: {:?}", files);
 
+        // TODO: Unregister capability?
+
         // Register capability to watch files
         self.client
             .register_capability(vec![Registration {
@@ -377,6 +379,9 @@ impl LanguageServer for Backend {
         self.client
             .log_message(MessageType::Info, "watched files have changed!")
             .await;
+
+        // TODO: Do not refetch configuration but use params
+        self.read_config().await;
     }
 
     async fn did_open(&self, params: DidOpenTextDocumentParams) {
@@ -569,29 +574,26 @@ impl Definition {
 
     /// Returns a flag emoji based on the supplied `language`
     fn get_flag(&self) -> Option<String> {
-        match &self.language {
-            Some(language) => {
-                // Splits 'en-us' to `vec!['en', 'us']`
-                let mut possible_countries = language
-                    .split('-')
-                    .map(|text| text.to_uppercase())
-                    .collect_vec();
+        let language = self.language.as_ref()?;
 
-                possible_countries.push(language.to_uppercase());
+        // Splits 'en-us' to `vec!['en', 'us']`
+        let mut possible_countries = language
+            .split('-')
+            .map(|text| text.to_uppercase())
+            .collect_vec();
 
-                // Reverse it to prioritise `language`, then 'us', then 'en'
-                possible_countries.reverse();
+        possible_countries.push(language.to_uppercase());
 
-                for country in possible_countries {
-                    let flag = flag(&country);
+        // Reverse it to prioritise `language`, then 'us', then 'en'
+        possible_countries.reverse();
 
-                    if flag.is_some() {
-                        return flag;
-                    }
-                }
-                None
+        for country in possible_countries {
+            let flag = flag(&country);
+
+            if flag.is_some() {
+                return flag;
             }
-            None => None,
         }
+        None
     }
 }

@@ -106,30 +106,8 @@ async fn initialize() {
 }
 
 #[tokio::test]
+#[allow(unused_must_use)]
 #[timeout(500)]
 async fn send_configuration() {
-    let (mut service, mut messages) = init_service();
-
-    assert_eq!(
-        service.call(INITIALIZE_REQUEST.clone()).await,
-        Ok(Some(INITIALIZE_RESPONSE.clone()))
-    );
-
-    assert_eq!(service.poll_ready(), Poll::Ready(Ok(())));
-
-    select!(
-        req = service.call(INITIALIZED_REQUEST.clone()).fuse() => {
-            assert_eq!(req.unwrap(), None);
-        },
-        () = handle_lsp_message(
-            &mut service,
-            &mut messages,
-            vec![
-                &*WORKSPACE_CONFIGURATION_REQUEST,
-                &*WORKSPACE_WORKSPACE_FOLDERS_REQUEST,
-            ],
-        ).fuse() => {
-            panic!("lsp messages should not finish faster than request")
-        },
-    );
+    prepare_workspace().await;
 }

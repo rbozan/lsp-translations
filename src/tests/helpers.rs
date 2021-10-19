@@ -84,6 +84,17 @@ lazy_static! {
         .as_str()
     )
     .unwrap();
+
+    static ref MESSAGE_OK_RESPONSE: Incoming = serde_json::from_str(
+        r#"
+        {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "result": null
+        }"#
+    )
+    .unwrap();
+
 }
 
 pub fn init_service() -> (Spawn<LspService>, MessageStream) {
@@ -137,8 +148,9 @@ pub async fn prepare_workspace() -> (Spawn<LspService>, MessageStream) {
             &mut service,
             &mut messages,
             vec![
-                &*WORKSPACE_CONFIGURATION_REQUEST,
-                &*WORKSPACE_WORKSPACE_FOLDERS_REQUEST,
+                &WORKSPACE_CONFIGURATION_REQUEST,
+                &WORKSPACE_WORKSPACE_FOLDERS_REQUEST,
+                &MESSAGE_OK_RESPONSE
             ],
         ).fuse() => {
             panic!("lsp messages should not finish faster than finishing request")
