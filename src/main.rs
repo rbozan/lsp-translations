@@ -21,6 +21,7 @@ use std::path::Path;
 use string_helper::get_editing_range;
 use string_helper::is_editing_position;
 use string_helper::TRANSLATION_BEGIN_CHARS;
+use string_helper::TRANSLATION_KEY_DIVIDER;
 
 use serde_json::Value;
 use tower_lsp::jsonrpc::{self, Error};
@@ -100,6 +101,7 @@ impl Backend {
             .log_message(MessageType::Info, format!("folders: {:?}", folders))
             .await;
 
+        // Retrieve the files based on the provided glob patterns
         let files: Vec<PathBuf> = folders
             .iter()
             .map(|folder| {
@@ -146,7 +148,32 @@ impl Backend {
 
         eprintln!("path bufs: {:?}", files);
 
+        // TODO: Unregister capability?
+
+        // Register capability to watch files
+        self.client
+            .register_capability(vec![Registration {
+                id: "workspace/didChangeWatchedFiles".to_string(),
+                method: "workspace/didChangeWatchedFiles".to_string(),
+                register_options: Some(
+                    serde_json::to_value(
+                        files
+                            .iter()
+                            .map(|file| FileSystemWatcher {
+                                glob_pattern: file.to_str().unwrap().to_string(),
+                                kind: None,
+                            })
+                            .collect::<Vec<FileSystemWatcher>>(),
+                    )
+                    .unwrap(),
+                ),
+            }])
+            .await
+            .unwrap();
+
+        // Clear and add definitions
         self.definitions.lock().unwrap().set(vec![]);
+
         for file in &files {
             (self.read_translation(file)).unwrap();
         }
@@ -291,6 +318,14 @@ impl Backend {
 #[tower_lsp::async_trait]
 impl LanguageServer for Backend {
     async fn initialize(&self, _: InitializeParams) -> jsonrpc::Result<InitializeResult> {
+        let mut trigger_characters = TRANSLATION_BEGIN_CHARS
+            .to_vec()
+            .iter()
+            .map(|char| char.to_string())
+            .collect::<Vec<String>>();
+
+        trigger_characters.push(TRANSLATION_KEY_DIVIDER.to_string());
+
         Ok(InitializeResult {
             server_info: None,
             capabilities: ServerCapabilities {
@@ -300,13 +335,7 @@ impl LanguageServer for Backend {
                 hover_provider: Some(HoverProviderCapability::Simple(true)),
                 completion_provider: Some(CompletionOptions {
                     resolve_provider: Some(true),
-                    trigger_characters: Some(
-                        TRANSLATION_BEGIN_CHARS
-                            .to_vec()
-                            .iter()
-                            .map(|char| char.to_string())
-                            .collect(),
-                    ),
+                    trigger_characters: Some(trigger_characters),
                     work_done_progress_options: Default::default(),
                     all_commit_characters: None,
                 }),
@@ -353,6 +382,9 @@ impl LanguageServer for Backend {
         self.client
             .log_message(MessageType::Info, "watched files have changed!")
             .await;
+
+        // TODO: Do not refetch configuration but use params
+        self.read_config().await;
     }
 
     async fn did_open(&self, params: DidOpenTextDocumentParams) {
@@ -423,19 +455,9 @@ impl LanguageServer for Backend {
             Ok(Some(CompletionResponse::Array(
                 definitions
                     .iter()
-                    .unique_by(|definition| {
-                        definition
-                            .cleaned_key
-                            .as_ref()
-                            .unwrap_or(&definition.key)
-                            .clone()
-                    })
+                    .unique_by(|definition| definition.get_identifier())
                     .map(|definition| CompletionItem {
-                        label: definition
-                            .cleaned_key
-                            .as_ref()
-                            .unwrap_or(&definition.key)
-                            .clone(),
+                        label: definition.get_identifier().to_string(),
                         kind: Some(CompletionItemKind::Text),
                         detail: None,
                         text_edit: Some(CompletionTextEdit::Edit(TextEdit {
@@ -520,16 +542,12 @@ async fn main() {
         .await;
 }
 
-use merge::Merge;
-#[derive(Merge, Default, Debug)]
+#[derive(Default, Debug)]
 struct Definition {
-    #[merge(skip)]
     key: String,
     cleaned_key: Option<String>,
-    #[merge(skip)]
     file: String,
     language: Option<String>,
-    #[merge(skip)]
     value: String,
 }
 
@@ -552,24 +570,33 @@ impl PartialEq<String> for Definition {
 }
 
 impl Definition {
-    fn get_flag(&self) -> Option<String> {
-        match &self.language {
-            Some(language) => {
-                let mut possible_countries = language
-                    .split('-')
-                    .map(|text| text.to_uppercase())
-                    .collect_vec();
-                possible_countries.push(language.to_uppercase());
-                possible_countries.reverse();
+    /// Returns the `cleaned_key` or the `key` if it does not exist.
+    fn get_identifier(&self) -> &String {
+        self.cleaned_key.as_ref().unwrap_or(&self.key)
+    }
 
-                for country in possible_countries {
-                    if let Some(emoji) = flag(&country) {
-                        return Some(emoji);
-                    }
-                }
-                None
+    /// Returns a flag emoji based on the supplied `language`
+    fn get_flag(&self) -> Option<String> {
+        let language = self.language.as_ref()?;
+
+        // Splits 'en-us' to `vec!['en', 'us']`
+        let mut possible_countries = language
+            .split('-')
+            .map(|text| text.to_uppercase())
+            .collect_vec();
+
+        possible_countries.push(language.to_uppercase());
+
+        // Reverse it to prioritise `language`, then 'us', then 'en'
+        possible_countries.reverse();
+
+        for country in possible_countries {
+            let flag = flag(&country);
+
+            if flag.is_some() {
+                return flag;
             }
-            None => None,
         }
+        None
     }
 }
