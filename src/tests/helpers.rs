@@ -68,7 +68,7 @@ lazy_static! {
                 "result": [
                     {{
                         "uri": "file://{:}",
-                        "name": "recharge-mobile-app"
+                        "name": "test-project"
                     }}
                 ]
             }}"#,
@@ -131,6 +131,12 @@ pub async fn handle_lsp_message(
 }
 
 pub async fn prepare_workspace() -> (Spawn<LspService>, MessageStream) {
+    prepare_with_workspace_config(&WORKSPACE_CONFIGURATION_REQUEST).await
+}
+
+pub async fn prepare_with_workspace_config(
+    workspace_config_request: &Incoming,
+) -> (Spawn<LspService>, MessageStream) {
     let (mut service, mut messages) = init_service();
 
     assert_eq!(
@@ -148,7 +154,7 @@ pub async fn prepare_workspace() -> (Spawn<LspService>, MessageStream) {
             &mut service,
             &mut messages,
             vec![
-                &WORKSPACE_CONFIGURATION_REQUEST,
+                workspace_config_request,
                 &WORKSPACE_WORKSPACE_FOLDERS_REQUEST,
                 &MESSAGE_OK_RESPONSE
             ],

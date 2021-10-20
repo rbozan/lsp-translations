@@ -62,9 +62,9 @@ struct FileNameConfig {
 
 #[derive(Deserialize, Debug, Default)]
 struct KeyConfig {
-    #[serde(with = "serde_regex")]
+    #[serde(with = "serde_regex", default)]
     details: Option<Regex>,
-    #[serde(with = "serde_regex")]
+    #[serde(with = "serde_regex", default)]
     filter: Option<Regex>,
 }
 
@@ -73,6 +73,7 @@ struct KeyConfig {
 struct ExtensionConfig {
     translation_files: Vec<String>,
     file_name: FileNameConfig,
+    #[serde(default)]
     key: KeyConfig,
 }
 
@@ -258,29 +259,49 @@ impl Backend {
 
     /// Gets details about a single definition
     fn get_definition_detail_by_key(&self, key: &String) -> Option<String> {
-        let definitions = self
-            .definitions
-            .lock()
-            .unwrap()
-            .get_mut()
-            .iter()
-            .filter(|definition| *definition == key)
-            .map(|def| {
-                format!(
-                    "{}|**{}**|{}",
-                    def.get_flag().unwrap_or_default(),
-                    def.language.as_ref().unwrap_or(&"".to_string()),
-                    def.value
-                )
-            })
-            .intersperse("\n".to_string())
-            .collect::<String>();
+        if let Ok(ref mut definitions) = self.definitions.try_lock() {
+            let definitions_same_key = definitions
+                .get_mut()
+                .iter()
+                .filter(|definition| *definition == key);
 
-        if definitions.is_empty() {
-            return None;
-        };
+            if definitions_same_key.clone().count() == 0 {
+                return None;
+            }
 
-        Some(format!("flag|language|translation\n-|-|-\n{}", definitions))
+            let has_language = definitions_same_key
+                .clone()
+                .any(|definition| definition.language.is_some());
+
+            let has_flag = definitions_same_key
+                .clone()
+                .any(|definition| definition.get_flag().is_some());
+
+            let body = definitions_same_key
+                .map(|def| {
+                    if has_flag || has_language {
+                        let row_data = vec![
+                            def.get_flag().unwrap_or_default(),
+                            format!("**{}**", def.language.as_ref().unwrap_or(&"".to_string())),
+                            def.value.clone(),
+                        ];
+
+                        row_data.join("|")
+                    } else {
+                        format!("|{}", def.value)
+                    }
+                })
+                .intersperse("\n".to_string())
+                .collect::<String>();
+
+            let header = if has_flag || has_language {
+                "flag|language|translation\n-|-|-"
+            } else {
+                "|translation\n|-"
+            };
+            return Some(format!("{}\n{}", header, body));
+        }
+        None
     }
 
     /// Fetches configuration
