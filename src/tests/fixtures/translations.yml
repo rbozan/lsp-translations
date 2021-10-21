@@ -1,0 +1,24 @@
+nl:
+  accounts:
+    edit:
+      new_password: ABC
+      update: HIJK
+  employees:
+    assigned_employees:
+      assigned_employee:
+        main_dta: LMNOP
+  simple_form:
+    "no": 'No'
+    required:
+      mark: '*'
+    new_model: '%{model} toevoegen'
+    confirm_registration: >
+      Let op!
+      Dit is meerdere regels
+    date:
+      abbr_day_names:
+      - Zo
+    formats:
+      default: ! '%d/%m/%Y'
+
+

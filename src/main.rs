@@ -6,6 +6,10 @@ mod tests;
 #[cfg(test)]
 mod tests_completion;
 
+#[path = "./tests/completion_yml.rs"]
+#[cfg(test)]
+mod tests_completion_yml;
+
 #[path = "./tests/hover.rs"]
 #[cfg(test)]
 mod tests_hover;
@@ -87,6 +91,8 @@ pub struct Backend {
     #[new(value = "Arc::new(Mutex::new(Cell::new(vec![])))")]
     documents: Arc<Mutex<Cell<Vec<FullTextDocument>>>>,
 }
+
+use std::ffi::OsStr;
 
 impl Backend {
     /// Figures out which translation files exists on the system of the user
@@ -184,8 +190,13 @@ impl Backend {
     fn read_translation(&self, path: &Path) -> Result<(), Box<dyn std::error::Error>> {
         let file = File::open(path)?;
         let reader = BufReader::new(file);
+        let ext = path.extension().and_then(OsStr::to_str);
 
-        let value: Value = serde_json::from_reader(reader)?;
+        let value = match ext {
+            Some("json") => serde_json::from_reader(reader)?,
+            Some("yaml") | Some("yml") => serde_yaml::from_reader(reader)?,
+            _ => Value::Null,
+        };
 
         let mut new_definitions = self.parse_translation_structure(&value, "".to_string());
 
@@ -211,6 +222,11 @@ impl Backend {
                         key
                     ),
                 ));
+            }),
+            Value::Array(values) => values.iter().enumerate().for_each(|(key, value)| {
+                definitions.append(
+                    &mut self.parse_translation_structure(value, format!("{}[{}]", json_path, key)),
+                );
             }),
             Value::String(value) => {
                 let cleaned_key = self
