@@ -302,7 +302,7 @@ impl Backend {
                 .map(|def| {
                     if has_flag || has_language {
                         let row_data = vec![
-                            def.get_flag().unwrap_or_default(),
+                            def.get_flag().unwrap_or_else(|| "❓".to_string()),
                             format!("**{}**", def.language.as_ref().unwrap_or(&"".to_string())),
                             def.get_printable_value(),
                         ];
