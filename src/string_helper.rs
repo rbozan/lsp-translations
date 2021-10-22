@@ -22,6 +22,8 @@ static TRANSLATION_BEGIN: &[&str] = &[
     "{t('",
     "{t(\"",
     "{t(`",
+    "I18n.t('",
+    "I18n.t(\"",
 ];
 
 static TRANSLATION_END: &[&str] = &["'", "\"", "`"];
