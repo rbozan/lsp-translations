@@ -299,12 +299,12 @@ impl Backend {
                         let row_data = vec![
                             def.get_flag().unwrap_or_default(),
                             format!("**{}**", def.language.as_ref().unwrap_or(&"".to_string())),
-                            def.value.clone(),
+                            def.get_printable_value(),
                         ];
 
                         row_data.join("|")
                     } else {
-                        format!("|{}", def.value)
+                        format!("|{}", def.get_printable_value())
                     }
                 })
                 .intersperse("\n".to_string())
@@ -640,10 +640,12 @@ impl Definition {
         }
         None
     }
-}
 
+    fn get_printable_value(&self) -> String {
+        self.value.escape_default().to_string()
+    }
+}
 
 #[path = "./tests/definition.rs"]
 #[cfg(test)]
 mod tests_definition;
-
