@@ -624,6 +624,10 @@ impl Definition {
 
         possible_countries.push(language.to_uppercase());
 
+        if language.to_uppercase() == "EN" {
+            possible_countries.push("US".to_string());
+        }
+
         // Reverse it to prioritise `language`, then 'us', then 'en'
         possible_countries.reverse();
 
@@ -637,3 +641,9 @@ impl Definition {
         None
     }
 }
+
+
+#[path = "./tests/definition.rs"]
+#[cfg(test)]
+mod tests_definition;
+
