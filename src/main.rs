@@ -10,6 +10,10 @@ mod tests_completion;
 #[cfg(test)]
 mod tests_completion_yml;
 
+#[path = "./tests/completion_multiple.rs"]
+#[cfg(test)]
+mod tests_completion_multiple;
+
 #[path = "./tests/hover.rs"]
 #[cfg(test)]
 mod tests_hover;
@@ -132,7 +136,6 @@ impl Backend {
                                     let result: Vec<Option<PathBuf>> = paths
                                         .map(|path| match path {
                                             Ok(path) => {
-                                                // panic!("paths glob: glob pattesrn: {:?}", PathBuf::from(&path));
                                                 Some(path)
                                             }
                                             Err(_) => None,
@@ -148,12 +151,13 @@ impl Backend {
                     })
                     .flatten()
                     .flatten()
-                    .collect::<PathBuf>()
+                    .collect::<Vec<PathBuf>>()
             })
+            .flatten()
             .filter(|path| path.is_file())
             .collect();
 
-        eprintln!("path bufs: {:?}", files);
+        eprintln!("Translation files: {:?}", files);
 
         // TODO: Unregister capability?
 
