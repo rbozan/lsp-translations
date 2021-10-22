@@ -154,6 +154,7 @@ impl Backend {
                     .collect::<Vec<PathBuf>>()
             })
             .flatten()
+            .unique()
             .filter(|path| path.is_file())
             .collect();
 
