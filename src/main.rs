@@ -609,6 +609,7 @@ impl PartialEq<String> for Definition {
     }
 }
 
+use ammonia::clean;
 impl Definition {
     /// Returns the `cleaned_key` or the `key` if it does not exist.
     fn get_identifier(&self) -> &String {
@@ -645,9 +646,7 @@ impl Definition {
     }
 
     fn get_printable_value(&self) -> String {
-        /* let newline_regex = Regex::new("\\n").unwrap();
-        newline_regex.replace_all(&self.value, "<br />"); */
-        self.value.escape_debug().to_string().replace("|", "\\|")
+        clean(&self.value)
     }
 }
 
