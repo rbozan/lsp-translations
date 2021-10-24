@@ -103,17 +103,20 @@ jobs:
           args: --release --target=${{ matrix.target }}
           use-cross: ${{!matrix.os}}
 
-      - if: matrix.target == 'i686-pc-windows-msvc' || matrix.target == 'x86_64-pc-windows-gnu'
-        name: 'Tar files (Windows)'
-        run: tar -cvf ${{ matrix.target }}.tar -C ./target/${{ matrix.target }}/release ./lsp-translations.exe
-      - if: matrix.target != 'i686-pc-windows-msvc' && matrix.target != 'x86_64-pc-windows-gnu'
-        name: 'Tar files (Linux and MacOS)'
-        run: tar -cvf ${{ matrix.target }}.tar -C ./target/${{ matrix.target }}/release ./lsp-translations
+      - if: matrix.target == 'x86_64-pc-windows-gnu'
+        name: 'Zip files (Windows on Linux OS)'
+        run: zip ${{ matrix.target }}.zip ./target/${{ matrix.target }}/release/lsp-translations.exe -j
+      - if: matrix.os == 'windows-2022'
+        name: 'Zip files (Windows OS)'
+        run: powershell Compress-Archive -Path ./target/${{ matrix.target }}/release/lsp-translations.exe -DestinationPath ./${{ matrix.target }}.zip
+      - if: matrix.target != 'x86_64-pc-windows-gnu' && matrix.os != 'windows-2022'
+        name: 'Zip files (Linux and MacOS)'
+        run: zip ${{ matrix.target }}.zip ./target/${{ matrix.target }}/release/lsp-translations -j
       - name: Upload artifacts
         uses: actions/upload-artifact@v2
         with:
           name: ${{ matrix.target }}
-          path: ${{ matrix.target }}.tar
+          path: ${{ matrix.target }}.zip
           if-no-files-found: error
 
   release:
@@ -130,5 +133,5 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           files: |
-            ${{steps.download.outputs.download-path}}/*/*.tar
+            ${{steps.download.outputs.download-path}}/*/*.zip
           fail_on_unmatched_files: true
