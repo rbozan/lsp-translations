@@ -135,9 +135,7 @@ impl Backend {
                                 Ok(paths) => {
                                     let result: Vec<Option<PathBuf>> = paths
                                         .map(|path| match path {
-                                            Ok(path) => {
-                                                Some(path)
-                                            }
+                                            Ok(path) => Some(path),
                                             Err(_) => None,
                                         })
                                         .collect();
@@ -647,7 +645,9 @@ impl Definition {
     }
 
     fn get_printable_value(&self) -> String {
-        self.value.escape_default().to_string()
+        /* let newline_regex = Regex::new("\\n").unwrap();
+        newline_regex.replace_all(&self.value, "<br />"); */
+        self.value.escape_debug().to_string().replace("|", "\\|")
     }
 }
 
