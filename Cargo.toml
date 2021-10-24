@@ -20,6 +20,8 @@ glob = "0.3.0"
 itertools = "0.10.1"
 lazy_static = "1.4.0"
 country-emoji = "0.1.2"
+ammonia = "3.1.2"
+table_print = "0.1.0"
 # lsp-text-document = "0.2.0"
 
 # [replace]
