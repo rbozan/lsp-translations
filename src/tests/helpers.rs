@@ -55,7 +55,7 @@ lazy_static! {
             "server": "verbose"
         }
     }
-], "id": 0 }"#
+], "id": 1 }"#
     )
     .unwrap();
 
@@ -64,7 +64,7 @@ lazy_static! {
             r#"
             {{
                 "jsonrpc": "2.0",
-                "id": 1,
+                "id": 2,
                 "result": [
                     {{
                         "uri": "file://{:}",
@@ -85,11 +85,23 @@ lazy_static! {
     )
     .unwrap();
 
-    static ref MESSAGE_OK_RESPONSE: Incoming = serde_json::from_str(
+
+    static ref MESSAGE_OK_RESPONSE_CONFIG_CAPABILITY: Incoming = serde_json::from_str(
         r#"
         {
             "jsonrpc": "2.0",
-            "id": 2,
+            "id": 0,
+            "result": null
+        }"#
+    )
+    .unwrap();
+
+
+    static ref MESSAGE_OK_RESPONSE_WATCH_CAPABILITY: Incoming = serde_json::from_str(
+        r#"
+        {
+            "jsonrpc": "2.0",
+            "id": 3,
             "result": null
         }"#
     )
@@ -122,7 +134,7 @@ pub async fn handle_lsp_message(
                     println!("[msg request] {:?}", &req);
 
                     let result = service.call(responses[i].clone()).await;
-                    println!("[msg response] {:?}", result);
+                    println!("[msg response #{}] {:?}", i, result);
                     i += 1;
                 }
             }
@@ -154,9 +166,10 @@ pub async fn prepare_with_workspace_config(
             &mut service,
             &mut messages,
             vec![
+                &MESSAGE_OK_RESPONSE_CONFIG_CAPABILITY,
                 workspace_config_request,
                 &WORKSPACE_WORKSPACE_FOLDERS_REQUEST,
-                &MESSAGE_OK_RESPONSE
+                &MESSAGE_OK_RESPONSE_WATCH_CAPABILITY
             ],
         ).fuse() => {
             panic!("lsp messages should not finish faster than finishing request")

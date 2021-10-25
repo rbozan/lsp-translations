@@ -107,7 +107,7 @@ lazy_static! {
             "server": "verbose"
         }
     }
-], "id": 0 }"#
+], "id": 1 }"#
     )
     .unwrap();
 
