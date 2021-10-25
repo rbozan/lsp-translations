@@ -27,7 +27,6 @@ use country_emoji::flag;
 use std::convert::TryInto;
 use std::path::Path;
 use string_helper::get_editing_range;
-use string_helper::is_editing_position;
 use string_helper::TRANSLATION_BEGIN_CHARS;
 use string_helper::TRANSLATION_KEY_DIVIDER;
 
@@ -63,13 +62,13 @@ extern crate ntest;
 #[macro_use]
 extern crate lazy_static;
 
-#[derive(Deserialize, Debug, Default)]
+#[derive(Deserialize, Debug, Default, Clone)]
 struct FileNameConfig {
     #[serde(with = "serde_regex")]
     details: Option<Regex>,
 }
 
-#[derive(Deserialize, Debug, Default)]
+#[derive(Deserialize, Debug, Default, Clone)]
 struct KeyConfig {
     #[serde(with = "serde_regex", default)]
     details: Option<Regex>,
@@ -77,7 +76,7 @@ struct KeyConfig {
     filter: Option<Regex>,
 }
 
-#[derive(Deserialize, Debug, Default)]
+#[derive(Deserialize, Debug, Default, Clone)]
 #[serde(rename_all = "camelCase")]
 struct ExtensionConfig {
     translation_files: Vec<String>,
@@ -104,8 +103,8 @@ impl Backend {
     /// and calls `read_translation` to append them to the definitions
     async fn fetch_translations(&self, config_value: Value) {
         // TODO: Move setting config to other function
-        let config: ExtensionConfig = serde_json::from_value(config_value).unwrap();
-        self.config.lock().unwrap().set(config);
+        let new_config: ExtensionConfig = serde_json::from_value(config_value).unwrap();
+        self.config.lock().unwrap().set(new_config.clone());
 
         let folders = self.client.workspace_folders().await.unwrap().unwrap();
 
@@ -159,7 +158,7 @@ impl Backend {
 
         eprintln!("Translation files: {:?}", files);
 
-        self.register_file_watch_capability(&files).await;
+        self.register_file_watch_capability(new_config).await;
 
         // Clear and add definitions
         self.definitions.lock().unwrap().set(vec![]);
@@ -169,7 +168,8 @@ impl Backend {
         }
     }
 
-    async fn register_file_watch_capability(&self, files: &Vec<PathBuf>) -> Result<(), Error>  {
+    // TODO: Read `config` from `self``
+    async fn register_file_watch_capability(&self, config: ExtensionConfig) -> Result<(), Error>  {
         // TODO: Unregister capability?
 
         // Register capability to watch files
@@ -179,18 +179,10 @@ impl Backend {
             register_options: Some(
                 serde_json::to_value(DidChangeWatchedFilesRegistrationOptions {
                     watchers: 
-
-                        /* self
-                        .config
-                        .lock()
-                        .unwrap()
-                        // TODO: Remove mut here
-                        .get_mut()
-                        .translation_files */
-                        files
+                        config.translation_files
                         .iter()
                         .map(|file| FileSystemWatcher {
-                            glob_pattern: file.to_str().unwrap().to_string(),
+                            glob_pattern: file.to_string(),
                             kind: None,
                         })
                         .collect(),
