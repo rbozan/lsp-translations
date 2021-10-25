@@ -30,8 +30,8 @@ use string_helper::get_editing_range;
 use string_helper::TRANSLATION_BEGIN_CHARS;
 use string_helper::TRANSLATION_KEY_DIVIDER;
 
-use serde_json::Value;
 use serde_json::json;
+use serde_json::Value;
 use tower_lsp::jsonrpc::{self, Error};
 use tower_lsp::lsp_types::*;
 use tower_lsp::{Client, LanguageServer, LspService, Server};
@@ -164,46 +164,58 @@ impl Backend {
         self.definitions.lock().unwrap().set(vec![]);
 
         for file in &files {
-            (self.read_translation(file)).unwrap();
+            match self.read_translation(file) {
+                // TODO: Print this to VSCode
+                Ok(_) => {
+                    eprintln!("Loaded definitions from {:?}", file);
+                }
+                Err(err) => {
+                    eprintln!("RECEIVED ERROR ON READ TRANSLATION {:?}", file);
+                    eprintln!("error {:?}", err);
+                }
+            }
         }
     }
 
     // TODO: Read `config` from `self``
-    async fn register_file_watch_capability(&self, config: ExtensionConfig) -> Result<(), Error>  {
+    async fn register_file_watch_capability(&self, config: ExtensionConfig) -> Result<(), Error> {
         // TODO: Unregister capability?
 
         // Register capability to watch files
-        self.client.register_capability(vec![Registration {
-            id: "workspace/didChangeWatchedFiles".to_string(),
-            method: "workspace/didChangeWatchedFiles".to_string(),
-            register_options: Some(
-                serde_json::to_value(DidChangeWatchedFilesRegistrationOptions {
-                    watchers: 
-                        config.translation_files
-                        .iter()
-                        .map(|file| FileSystemWatcher {
-                            glob_pattern: file.to_string(),
-                            kind: None,
-                        })
-                        .collect(),
-                })
-                .unwrap(),
-            ),
-        }]).await
+        self.client
+            .register_capability(vec![Registration {
+                id: "workspace/didChangeWatchedFiles".to_string(),
+                method: "workspace/didChangeWatchedFiles".to_string(),
+                register_options: Some(
+                    serde_json::to_value(DidChangeWatchedFilesRegistrationOptions {
+                        watchers: config
+                            .translation_files
+                            .iter()
+                            .map(|file| FileSystemWatcher {
+                                glob_pattern: file.to_string(),
+                                kind: None,
+                            })
+                            .collect(),
+                    })
+                    .unwrap(),
+                ),
+            }])
+            .await
     }
 
     async fn register_config_watch_capability(&self) -> Result<(), Error> {
-          self.client.register_capability(vec![Registration {
-            id: "workspace/didChangeConfiguration".to_string(),
-            method: "workspace/didChangeConfiguration".to_string(),
-            register_options: Some(
-                serde_json::to_value(DidChangeConfigurationParams {
-                   settings: json!({ "lsp-translations": null })
-                })
-                .unwrap(),
-            ),
-        }]).await
-
+        self.client
+            .register_capability(vec![Registration {
+                id: "workspace/didChangeConfiguration".to_string(),
+                method: "workspace/didChangeConfiguration".to_string(),
+                register_options: Some(
+                    serde_json::to_value(DidChangeConfigurationParams {
+                        settings: json!({ "lsp-translations": null }),
+                    })
+                    .unwrap(),
+                ),
+            }])
+            .await
     }
 
     /// Reads the translations from a single file and adds them to the `definitions`
