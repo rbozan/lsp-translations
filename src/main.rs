@@ -163,18 +163,25 @@ impl Backend {
         // Clear and add definitions
         self.definitions.lock().unwrap().set(vec![]);
 
-        for file in &files {
+        // TODO: Use self.client.log_message instead of eprintln!
+        files.iter().for_each(|file| {
             match self.read_translation(file) {
                 // TODO: Print this to VSCode
                 Ok(_) => {
                     eprintln!("Loaded definitions from {:?}", file);
+
+                    /* self.client
+                    .log_message(MessageType::Info, format!("folders: {:?}", folders)).await; */
                 }
                 Err(err) => {
-                    eprintln!("RECEIVED ERROR ON READ TRANSLATION {:?}", file);
-                    eprintln!("error {:?}", err);
+                    eprintln!("Could not read translation file {:?}.", file);
+                    eprintln!("{:?}", err);
+
+                    /* self.client
+                    .log_message(MessageType::Info, format!("folders: {:?}", folders)).await; */
                 }
             }
-        }
+        });
     }
 
     // TODO: Read `config` from `self``
