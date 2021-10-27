@@ -18,6 +18,10 @@ mod tests_completion_multiple;
 #[cfg(test)]
 mod tests_hover;
 
+#[path = "./tests/hover_per_language_file.rs"]
+#[cfg(test)]
+mod tests_hover_per_language_file;
+
 mod lsp_document;
 use crate::lsp_document::FullTextDocument;
 
@@ -255,6 +259,33 @@ impl Backend {
 
         let mut new_definitions = self.parse_translation_structure(&value, "".to_string());
 
+        // Use file regex language for all above definitions
+        let language = self
+            .config
+            .lock()
+            .unwrap()
+            .get_mut()
+            .file_name
+            .details
+            .as_ref()
+            .and_then(|file_name_details_regex| {
+                file_name_details_regex
+                    .captures(path.file_name().unwrap().to_str().unwrap())
+                    .and_then(|cap| {
+                        cap.name("language")
+                            .map(|matches| matches.as_str().to_string())
+                    })
+            });
+
+        let translation_file = TranslationFile {
+            path: path.to_path_buf(),
+            language,
+        };
+
+        for definition in new_definitions.iter_mut() {
+            definition.file = Some(translation_file.clone());
+        }
+
         let mut definitions = self.definitions.lock().unwrap();
         new_definitions.append(definitions.get_mut());
         definitions.set(new_definitions);
@@ -342,7 +373,7 @@ impl Backend {
 
             let has_language = definitions_same_key
                 .clone()
-                .any(|definition| definition.language.is_some());
+                .any(|definition| definition.get_language().is_some());
 
             let has_flag = definitions_same_key
                 .clone()
@@ -353,7 +384,7 @@ impl Backend {
                     if has_flag || has_language {
                         let row_data = vec![
                             def.get_flag().unwrap_or_default(),
-                            format!("**{}**", def.language.as_ref().unwrap_or(&"".to_string())),
+                            format!("**{}**", def.get_language().unwrap_or(&"".to_string())),
                             def.get_printable_value(),
                         ];
 
@@ -635,11 +666,17 @@ async fn main() {
         .await;
 }
 
+#[derive(Debug, Clone)]
+struct TranslationFile {
+    path: PathBuf,
+    language: Option<String>,
+}
+
 #[derive(Default, Debug)]
 struct Definition {
     key: String,
     cleaned_key: Option<String>,
-    file: String,
+    file: Option<TranslationFile>,
     language: Option<String>,
     value: String,
 }
@@ -668,9 +705,16 @@ impl Definition {
         self.cleaned_key.as_ref().unwrap_or(&self.key)
     }
 
+    fn get_language(&self) -> Option<&String> {
+        return self
+            .language
+            .as_ref()
+            .or(self.file.as_ref().and_then(|file| file.language.as_ref()));
+    }
+
     /// Returns a flag emoji based on the supplied `language`
     fn get_flag(&self) -> Option<String> {
-        let language = self.language.as_ref()?;
+        let language = self.get_language()?;
 
         // Splits 'en-us' to `vec!['en', 'us']`
         let mut possible_countries = language
