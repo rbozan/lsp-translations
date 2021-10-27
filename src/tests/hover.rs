@@ -107,7 +107,7 @@ lazy_static! {
             "server": "verbose"
         }
     }
-], "id": 0 }"#
+], "id": 1 }"#
     )
     .unwrap();
 
@@ -117,7 +117,7 @@ lazy_static! {
 {
    "jsonrpc":"2.0",
    "result":{
-      "contents": "|translation\n|-\n|This title will appear in the header.",
+      "contents": "|translation|\n|-\n|This title will appear in the header.",
       "range":{
          "end":{
             "character":28,

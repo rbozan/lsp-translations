@@ -27,10 +27,10 @@ use country_emoji::flag;
 use std::convert::TryInto;
 use std::path::Path;
 use string_helper::get_editing_range;
-use string_helper::is_editing_position;
 use string_helper::TRANSLATION_BEGIN_CHARS;
 use string_helper::TRANSLATION_KEY_DIVIDER;
 
+use serde_json::json;
 use serde_json::Value;
 use tower_lsp::jsonrpc::{self, Error};
 use tower_lsp::lsp_types::*;
@@ -62,13 +62,13 @@ extern crate ntest;
 #[macro_use]
 extern crate lazy_static;
 
-#[derive(Deserialize, Debug, Default)]
+#[derive(Deserialize, Debug, Default, Clone)]
 struct FileNameConfig {
     #[serde(with = "serde_regex")]
     details: Option<Regex>,
 }
 
-#[derive(Deserialize, Debug, Default)]
+#[derive(Deserialize, Debug, Default, Clone)]
 struct KeyConfig {
     #[serde(with = "serde_regex", default)]
     details: Option<Regex>,
@@ -76,7 +76,7 @@ struct KeyConfig {
     filter: Option<Regex>,
 }
 
-#[derive(Deserialize, Debug, Default)]
+#[derive(Deserialize, Debug, Default, Clone)]
 #[serde(rename_all = "camelCase")]
 struct ExtensionConfig {
     translation_files: Vec<String>,
@@ -103,8 +103,8 @@ impl Backend {
     /// and calls `read_translation` to append them to the definitions
     async fn fetch_translations(&self, config_value: Value) {
         // TODO: Move setting config to other function
-        let config: ExtensionConfig = serde_json::from_value(config_value).unwrap();
-        self.config.lock().unwrap().set(config);
+        let new_config: ExtensionConfig = serde_json::from_value(config_value).unwrap();
+        self.config.lock().unwrap().set(new_config.clone());
 
         let folders = self.client.workspace_folders().await.unwrap().unwrap();
 
@@ -158,35 +158,87 @@ impl Backend {
 
         eprintln!("Translation files: {:?}", files);
 
-        // TODO: Unregister capability?
-
-        // Register capability to watch files
-        self.client
-            .register_capability(vec![Registration {
-                id: "workspace/didChangeWatchedFiles".to_string(),
-                method: "workspace/didChangeWatchedFiles".to_string(),
-                register_options: Some(
-                    serde_json::to_value(
-                        files
-                            .iter()
-                            .map(|file| FileSystemWatcher {
-                                glob_pattern: file.to_str().unwrap().to_string(),
-                                kind: None,
-                            })
-                            .collect::<Vec<FileSystemWatcher>>(),
-                    )
-                    .unwrap(),
-                ),
-            }])
-            .await
-            .unwrap();
+        self.register_file_watch_capability(&new_config, &folders)
+            .await;
 
         // Clear and add definitions
         self.definitions.lock().unwrap().set(vec![]);
 
-        for file in &files {
-            (self.read_translation(file)).unwrap();
-        }
+        // TODO: Use self.client.log_message instead of eprintln!
+        files.iter().for_each(|file| {
+            match self.read_translation(file) {
+                // TODO: Print this to VSCode
+                Ok(_) => {
+                    eprintln!("Loaded definitions from {:?}", file);
+
+                    /* self.client
+                    .log_message(MessageType::Info, format!("folders: {:?}", folders)).await; */
+                }
+                Err(err) => {
+                    eprintln!("Could not read translation file {:?}.", file);
+                    eprintln!("{:?}", err);
+
+                    /* self.client
+                    .log_message(MessageType::Info, format!("folders: {:?}", folders)).await; */
+                }
+            }
+        });
+    }
+
+    /// Register capability to watch files
+    async fn register_file_watch_capability(
+        &self,
+        config: &ExtensionConfig,
+        folders: &Vec<WorkspaceFolder>,
+    ) -> Result<(), Error> {
+        let trim_start: &[_] = &['.', '/'];
+
+        let watched_patterns = DidChangeWatchedFilesRegistrationOptions {
+            watchers: folders
+                .iter()
+                .map(|folder| {
+                    config
+                        .translation_files
+                        .iter()
+                        .map(|pattern| FileSystemWatcher {
+                            glob_pattern: folder
+                                .uri
+                                .to_file_path()
+                                .unwrap()
+                                .join(PathBuf::from(pattern.trim_start_matches(trim_start)))
+                                .to_str()
+                                .unwrap()
+                                .to_string(),
+                            kind: None,
+                        })
+                        .collect::<Vec<FileSystemWatcher>>()
+                })
+                .flatten()
+                .collect(),
+        };
+
+        self.client
+            .register_capability(vec![Registration {
+                id: "workspace/didChangeWatchedFiles".to_string(),
+                method: "workspace/didChangeWatchedFiles".to_string(),
+                register_options: Some(serde_json::to_value(watched_patterns).unwrap()),
+            }])
+            .await
+    }
+
+    async fn register_config_watch_capability(&self) -> Result<(), Error> {
+        self.client
+            .register_capability(vec![Registration {
+                id: "workspace/didChangeConfiguration".to_string(),
+                method: "workspace/didChangeConfiguration".to_string(),
+                register_options: Some(
+                    serde_json::to_value(DidChangeConfigurationParams {
+                        settings: json!({ "lsp-translations": null }),
+                    })
+                    .unwrap(),
+                ),
+            }])
+            .await
     }
 
     /// Reads the translations from a single file and adds them to the `definitions`
@@ -316,7 +368,7 @@ impl Backend {
             let header = if has_flag || has_language {
                 "flag|language|translation\n-|-|-"
             } else {
-                "|translation\n|-"
+                "|translation|\n|-"
             };
             return Some(format!("{}\n{}", header, body));
         }
@@ -392,6 +444,7 @@ impl LanguageServer for Backend {
     }
 
     async fn initialized(&self, _: InitializedParams) {
+        self.register_config_watch_capability().await;
         self.read_config().await;
     }
 

@@ -27,7 +27,7 @@ lazy_static! {
             "server": "verbose"
         }
     }
-], "id": 0 }"#
+], "id": 1 }"#
     )
     .unwrap();
     static ref DID_OPEN_REQUEST: Incoming = serde_json::from_str(
@@ -42,7 +42,7 @@ lazy_static! {
                     "text": "translate('')"
                 }
             },
-            "id":1
+            "id": 2
         }"#
     )
     .unwrap();
@@ -62,7 +62,7 @@ lazy_static! {
                     "triggerKind": 1
                 }
             },
-            "id":1
+            "id": 2
         }"#
     )
     .unwrap();
@@ -226,7 +226,7 @@ lazy_static! {
          }
       }
    ],
-   "id":1
+   "id": 2
 }
 "#
         )
