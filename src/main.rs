@@ -158,7 +158,8 @@ impl Backend {
 
         eprintln!("Translation files: {:?}", files);
 
-        self.register_file_watch_capability(new_config).await;
+        self.register_file_watch_capability(&new_config, &folders)
+            .await;
 
         // Clear and add definitions
         self.definitions.lock().unwrap().set(vec![]);
@@ -184,28 +185,43 @@ impl Backend {
         });
     }
 
-    // TODO: Read `config` from `self``
-    async fn register_file_watch_capability(&self, config: ExtensionConfig) -> Result<(), Error> {
-        // TODO: Unregister capability?
+    /// Register capability to watch files
+    async fn register_file_watch_capability(
+        &self,
+        config: &ExtensionConfig,
+        folders: &Vec<WorkspaceFolder>,
+    ) -> Result<(), Error> {
+        let trim_start: &[_] = &['.', '/'];
 
-        // Register capability to watch files
+        let watched_patterns = DidChangeWatchedFilesRegistrationOptions {
+            watchers: folders
+                .iter()
+                .map(|folder| {
+                    config
+                        .translation_files
+                        .iter()
+                        .map(|pattern| FileSystemWatcher {
+                            glob_pattern: folder
+                                .uri
+                                .to_file_path()
+                                .unwrap()
+                                .join(PathBuf::from(pattern.trim_start_matches(trim_start)))
+                                .to_str()
+                                .unwrap()
+                                .to_string(),
+                            kind: None,
+                        })
+                        .collect::<Vec<FileSystemWatcher>>()
+                })
+                .flatten()
+                .collect(),
+        };
+
         self.client
             .register_capability(vec![Registration {
                 id: "workspace/didChangeWatchedFiles".to_string(),
                 method: "workspace/didChangeWatchedFiles".to_string(),
-                register_options: Some(
-                    serde_json::to_value(DidChangeWatchedFilesRegistrationOptions {
-                        watchers: config
-                            .translation_files
-                            .iter()
-                            .map(|file| FileSystemWatcher {
-                                glob_pattern: file.to_string(),
-                                kind: None,
-                            })
-                            .collect(),
-                    })
-                    .unwrap(),
-                ),
+                register_options: Some(serde_json::to_value(watched_patterns).unwrap()),
             }])
             .await
     }
@@ -352,7 +368,7 @@ impl Backend {
             let header = if has_flag || has_language {
                 "flag|language|translation\n-|-|-"
             } else {
-                "|translation\n|-"
+                "|translation|\n|-"
             };
             return Some(format!("{}\n{}", header, body));
         }
