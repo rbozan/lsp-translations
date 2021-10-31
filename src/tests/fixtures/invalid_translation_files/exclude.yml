@@ -1,0 +1,4 @@
+# A correct translation
+test: "This should not be included as the line below contains a boolean"
+# A boolean is not a valid translation
+error: true
