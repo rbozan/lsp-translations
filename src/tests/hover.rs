@@ -93,10 +93,12 @@ lazy_static! {
     static ref WORKSPACE_CONFIGURATION_REQUEST_WITHOUT_LANGUAGE : Incoming = serde_json::from_str(
         r#"{"jsonrpc":"2.0","result": [
     {
-        "translationFiles": [
-            "./fixtures/*.json",
-            ".\\fixtures\\*.json"
-        ],
+        "translationFiles": {
+            "include": [
+                "./fixtures/*.json",
+                ".\\fixtures\\*.json"
+            ]
+        },
         "fileName": {
             "details": "testdsddasdasdddsad"
         },

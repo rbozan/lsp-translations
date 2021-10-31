@@ -14,6 +14,10 @@ mod tests_completion_yml;
 #[cfg(test)]
 mod tests_completion_multiple;
 
+#[path = "./tests/completion_exclude.rs"]
+#[cfg(test)]
+mod tests_completion_exclude;
+
 #[path = "./tests/hover.rs"]
 #[cfg(test)]
 mod tests_hover;
@@ -67,65 +71,21 @@ extern crate ntest;
 extern crate lazy_static;
 
 #[derive(Deserialize, Debug, Default, Clone)]
-struct FileNameConfig {
-    #[serde(with = "serde_regex")]
-    details: Option<Regex>,
+struct TranslationFilesConfig {
+    include: Vec<String>,
+    exclude: Option<Vec<String>>,
 }
 
-#[derive(Deserialize, Debug, Default, Clone)]
-struct KeyConfig {
-    #[serde(with = "serde_regex", default)]
-    details: Option<Regex>,
-    #[serde(with = "serde_regex", default)]
-    filter: Option<Regex>,
-}
-
-#[derive(Deserialize, Debug, Default, Clone)]
-#[serde(rename_all = "camelCase")]
-struct ExtensionConfig {
-    translation_files: Vec<String>,
-    file_name: FileNameConfig,
-    #[serde(default)]
-    key: KeyConfig,
-}
-
-#[derive(new)]
-pub struct Backend {
-    client: Client,
-    #[new(value = "Arc::new(Mutex::new(Cell::new(vec![])))")]
-    definitions: Arc<Mutex<Cell<Vec<Definition>>>>,
-    #[new(value = "Arc::new(Mutex::new(Cell::new(ExtensionConfig::default())))")]
-    config: Arc<Mutex<Cell<ExtensionConfig>>>,
-    #[new(value = "Arc::new(Mutex::new(Cell::new(vec![])))")]
-    documents: Arc<Mutex<Cell<Vec<FullTextDocument>>>>,
-}
-
-use std::ffi::OsStr;
-
-impl Backend {
-    /// Figures out which translation files exists on the system of the user
-    /// and calls `read_translation` to append them to the definitions
-    async fn fetch_translations(&self, config_value: Value) {
-        // TODO: Move setting config to other function
-        let new_config: ExtensionConfig = serde_json::from_value(config_value).unwrap();
-        self.config.lock().unwrap().set(new_config.clone());
-
-        let folders = self.client.workspace_folders().await.unwrap().unwrap();
-
-        self.client
-            .log_message(MessageType::Info, format!("folders: {:?}", folders))
-            .await;
-
-        // Retrieve the files based on the provided glob patterns
-        let files: Vec<PathBuf> = folders
+impl TranslationFilesConfig {
+    fn get_translation_files_from_patterns(
+        &self,
+        folders: &Vec<WorkspaceFolder>,
+        patterns: &Vec<String>,
+    ) -> Vec<PathBuf> {
+        folders
             .iter()
             .map(|folder| {
-                self.config
-                    .lock()
-                    .unwrap()
-                    // TODO: Remove mut here
-                    .get_mut()
-                    .translation_files
+                patterns
                     .iter()
                     .filter_map(|glob_pattern_setting| {
                         match &folder
@@ -158,7 +118,78 @@ impl Backend {
             .flatten()
             .unique()
             .filter(|path| path.is_file())
-            .collect();
+            .collect()
+    }
+
+    fn get_translation_files_from_config(&self, folders: &Vec<WorkspaceFolder>) -> Vec<PathBuf> {
+        let mut includes = self.get_translation_files_from_patterns(folders, &self.include);
+        let excludes = match &self.exclude {
+            Some(excludes) => self.get_translation_files_from_patterns(folders, excludes),
+            None => vec![],
+        };
+
+        includes.retain(|file| !excludes.contains(file));
+        includes
+    }
+}
+
+#[derive(Deserialize, Debug, Default, Clone)]
+struct FileNameConfig {
+    #[serde(with = "serde_regex")]
+    details: Option<Regex>,
+}
+
+#[derive(Deserialize, Debug, Default, Clone)]
+struct KeyConfig {
+    #[serde(with = "serde_regex", default)]
+    details: Option<Regex>,
+    #[serde(with = "serde_regex", default)]
+    filter: Option<Regex>,
+}
+
+#[derive(Deserialize, Debug, Default, Clone)]
+#[serde(rename_all = "camelCase")]
+struct ExtensionConfig {
+    translation_files: TranslationFilesConfig,
+    file_name: FileNameConfig,
+    #[serde(default)]
+    key: KeyConfig,
+}
+
+#[derive(new)]
+pub struct Backend {
+    client: Client,
+    #[new(value = "Arc::new(Mutex::new(Cell::new(vec![])))")]
+    definitions: Arc<Mutex<Cell<Vec<Definition>>>>,
+    #[new(value = "Arc::new(Mutex::new(Cell::new(ExtensionConfig::default())))")]
+    config: Arc<Mutex<Cell<ExtensionConfig>>>,
+    #[new(value = "Arc::new(Mutex::new(Cell::new(vec![])))")]
+    documents: Arc<Mutex<Cell<Vec<FullTextDocument>>>>,
+}
+
+use std::ffi::OsStr;
+
+impl Backend {
+    /// Figures out which translation files exists on the system of the user
+    /// and calls `read_translation` to append them to the definitions
+    async fn fetch_translations(&self, config_value: Value) {
+        // TODO: Move setting config to other function
+        let new_config: ExtensionConfig = serde_json::from_value(config_value).unwrap();
+        self.config.lock().unwrap().set(new_config.clone());
+
+        let folders = self.client.workspace_folders().await.unwrap().unwrap();
+
+        self.client
+            .log_message(MessageType::Info, format!("folders: {:?}", folders))
+            .await;
+
+        let files: Vec<PathBuf> = self
+            .config
+            .lock()
+            .unwrap()
+            .get_mut()
+            .translation_files
+            .get_translation_files_from_config(&folders);
 
         eprintln!("Translation files: {:?}", files);
 
@@ -203,6 +234,7 @@ impl Backend {
                 .map(|folder| {
                     config
                         .translation_files
+                        .include
                         .iter()
                         .map(|pattern| FileSystemWatcher {
                             glob_pattern: folder

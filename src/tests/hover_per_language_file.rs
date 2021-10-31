@@ -25,9 +25,11 @@ lazy_static! {
     static ref WORKSPACE_CONFIGURATION_REQUEST_WITH_LANGUAGE: Incoming = serde_json::from_str(
         r#"{"jsonrpc":"2.0","result": [
     {
-        "translationFiles": [
-            "./fixtures/per_language_file/*.json"
-        ],
+        "translationFiles": {
+            "include": [
+                "./fixtures/per_language_file/*.json"
+            ]
+        },
         "fileName": {
             "details": "(?P<language>.+?)\\."
         },
@@ -89,9 +91,11 @@ lazy_static! {
     static ref WORKSPACE_CONFIGURATION_REQUEST_WITHOUT_LANGUAGE: Incoming = serde_json::from_str(
         r#"{"jsonrpc":"2.0","result": [
     {
-        "translationFiles": [
-            "./fixtures/per_language_file/*.json"
-        ],
+        "translationFiles": {
+            "include": [
+                "./fixtures/per_language_file/*.json"
+            ]
+        },
         "fileName": {
             "details": ""
         },

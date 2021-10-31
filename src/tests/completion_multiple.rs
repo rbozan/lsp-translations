@@ -12,10 +12,12 @@ lazy_static! {
     static ref WORKSPACE_CONFIGURATION_REQUEST: Incoming = serde_json::from_str(
         r#"{"jsonrpc":"2.0","result": [
     {
-        "translationFiles": [
-            "./fixtures/*.yml",
-            "./fixtures/*.json"
-        ],
+        "translationFiles": {
+            "include": [
+                "./fixtures/*.yml",
+                "./fixtures/*.json"
+            ]
+        },
         "fileName": {
             "details": ""
         },
