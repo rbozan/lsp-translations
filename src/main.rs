@@ -18,6 +18,10 @@ mod tests_completion_multiple;
 #[cfg(test)]
 mod tests_completion_exclude;
 
+#[path = "./tests/completion_invalid_translation_file.rs"]
+#[cfg(test)]
+mod tests_completion_invalid_translation_file;
+
 #[path = "./tests/hover.rs"]
 #[cfg(test)]
 mod tests_hover;
@@ -169,6 +173,19 @@ pub struct Backend {
 
 use std::ffi::OsStr;
 
+use std::fmt;
+
+#[derive(Debug)]
+struct InvalidTranslationFileStructure;
+
+impl fmt::Display for InvalidTranslationFileStructure {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Invalid translation file structure")
+    }
+}
+
+impl std::error::Error for InvalidTranslationFileStructure {}
+
 impl Backend {
     /// Figures out which translation files exists on the system of the user
     /// and calls `read_translation` to append them to the definitions
@@ -289,7 +306,7 @@ impl Backend {
             _ => Value::Null,
         };
 
-        let mut new_definitions = self.parse_translation_structure(&value, "".to_string());
+        let mut new_definitions = self.parse_translation_structure(&value, "".to_string())?;
 
         // Use file regex language for all above definitions
         let language = self
@@ -326,69 +343,89 @@ impl Backend {
     }
 
     /// Recursively goes through all the keys and convert them to `Vec<Definition>`
-    fn parse_translation_structure(&self, value: &Value, json_path: String) -> Vec<Definition> {
+    fn parse_translation_structure(
+        &self,
+        value: &Value,
+        json_path: String,
+    ) -> Result<Vec<Definition>, InvalidTranslationFileStructure> {
         let mut definitions = vec![];
 
-        match value {
-            Value::Object(values) => values.iter().for_each(|(key, value)| {
-                definitions.append(&mut self.parse_translation_structure(
-                    value,
-                    format!(
-                        "{}{}{}",
-                        json_path,
-                        if !json_path.is_empty() { "." } else { "" },
-                        key
-                    ),
-                ));
-            }),
-            Value::Array(values) => values.iter().enumerate().for_each(|(key, value)| {
-                definitions.append(
-                    &mut self.parse_translation_structure(value, format!("{}[{}]", json_path, key)),
-                );
-            }),
-            Value::String(value) => {
-                let cleaned_key = self
-                    .config
-                    .lock()
-                    .unwrap()
-                    .get_mut()
-                    .key
-                    .filter
-                    .as_ref()
-                    .and_then(|key_filter_regex| {
-                        key_filter_regex
-                            .captures(&json_path.replace("\n", ""))
-                            .and_then(|cap| cap.get(1).map(|group| group.as_str().to_string()))
+        let result: Result<(), InvalidTranslationFileStructure> =
+            match value {
+                Value::Object(values) => {
+                    for (key, value) in values.iter() {
+                        definitions.append(&mut self.parse_translation_structure(
+                            value,
+                            format!(
+                                "{}{}{}",
+                                json_path,
+                                if !json_path.is_empty() { "." } else { "" },
+                                key
+                            ),
+                        )?);
+                    }
+
+                    Ok(())
+                }
+
+                Value::Array(values) => {
+                    for (key, value) in values.iter().enumerate() {
+                        definitions.append(&mut self.parse_translation_structure(
+                            value,
+                            format!("{}[{}]", json_path, key),
+                        )?);
+                    }
+
+                    Ok(())
+                }
+                Value::String(value) => {
+                    let cleaned_key = self
+                        .config
+                        .lock()
+                        .unwrap()
+                        .get_mut()
+                        .key
+                        .filter
+                        .as_ref()
+                        .and_then(|key_filter_regex| {
+                            key_filter_regex
+                                .captures(&json_path.replace("\n", ""))
+                                .and_then(|cap| cap.get(1).map(|group| group.as_str().to_string()))
+                        });
+
+                    let language = &self
+                        .config
+                        .lock()
+                        .unwrap()
+                        .get_mut()
+                        .key
+                        .details
+                        .as_ref()
+                        .and_then(|key_details_regex| {
+                            key_details_regex.captures(&json_path).and_then(|cap| {
+                                cap.name("language")
+                                    .map(|matches| matches.as_str().to_string())
+                            })
+                        });
+
+                    // key_filter_regex.captures_iter(&json_path).intersperse(".").collect();
+                    definitions.push(Definition {
+                        key: json_path,
+                        cleaned_key,
+                        value: value.to_string(),
+                        language: language.clone(),
+                        ..Default::default()
                     });
 
-                let language = &self
-                    .config
-                    .lock()
-                    .unwrap()
-                    .get_mut()
-                    .key
-                    .details
-                    .as_ref()
-                    .and_then(|key_details_regex| {
-                        key_details_regex.captures(&json_path).and_then(|cap| {
-                            cap.name("language")
-                                .map(|matches| matches.as_str().to_string())
-                        })
-                    });
+                    Ok(())
+                }
+                _ => Err(InvalidTranslationFileStructure),
+            };
 
-                // key_filter_regex.captures_iter(&json_path).intersperse(".").collect();
-                definitions.push(Definition {
-                    key: json_path,
-                    cleaned_key,
-                    value: value.to_string(),
-                    language: language.clone(),
-                    ..Default::default()
-                })
-            }
-            _ => panic!("TODO: Error, translation file is not an object or string"),
+        match result {
+            Ok(()) => Ok(definitions),
+            Err(err) => Err(err),
         }
-
-        definitions
     }
 
     /// Gets details about a single definition
