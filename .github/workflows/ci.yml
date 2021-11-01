@@ -126,11 +126,11 @@ jobs:
     steps:
       - name: Bump version and push tag
         id: tag_version
-        uses: anothrNick/github-tag-action@1.36.0
+        uses: hennejg/github-tag-action@v4.3.1
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          WITH_V: false
-          RELEASE_BRANCHES: master
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          tag_prefix: ''
+          release_branches: master
       - name: Download artifacts
         uses: actions/download-artifact@v2
         id: download
@@ -143,3 +143,4 @@ jobs:
             ${{steps.download.outputs.download-path}}/*/*.zip
           fail_on_unmatched_files: true
           tag_name: ${{ steps.tag_version.outputs.new_tag || github.ref }}
+          body: ${{ steps.tag_version.outputs.changelog }}
