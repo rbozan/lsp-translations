@@ -30,8 +30,15 @@ mod tests_hover;
 #[cfg(test)]
 mod tests_hover_per_language_file;
 
-mod lsp_document;
-use crate::lsp_document::FullTextDocument;
+#[path = "./tests/emoji_document.rs"]
+#[cfg(test)]
+mod tests_emoji_document;
+
+mod full_text_document;
+use crate::full_text_document::FullTextDocument;
+
+use lsp_document::apply_change;
+use lsp_document::{IndexedText, Pos, TextAdapter, TextMap};
 
 mod string_helper;
 use crate::string_helper::find_translation_key_by_position;
@@ -598,14 +605,20 @@ impl LanguageServer for Backend {
     }
 
     async fn did_change(&self, params: DidChangeTextDocumentParams) {
-        self.documents
-            .lock()
-            .unwrap()
-            .get_mut()
-            .iter_mut()
-            .find(|doc| doc.uri == params.text_document.uri)
-            .unwrap()
-            .update(params.content_changes, params.text_document.version.into());
+        if let Ok(ref mut definitions) = self.documents.try_lock() {
+            let documents = definitions.get_mut();
+
+            let document = documents
+                .iter_mut()
+                .find(|doc| doc.uri == params.text_document.uri)
+                .unwrap();
+
+            for content_change in params.content_changes {
+                let change = document.text.lsp_change_to_change(content_change).unwrap();
+
+                document.text = IndexedText::new(apply_change(&document.text, change));
+            }
+        }
     }
 
     async fn did_close(&self, params: DidCloseTextDocumentParams) {
@@ -634,7 +647,10 @@ impl LanguageServer for Backend {
             .unwrap()
             .clone();
 
-        let pos = document.offset_at(params.text_document_position.position);
+        let pos = document
+            .text
+            .lsp_pos_to_pos(&params.text_document_position.position)
+            .unwrap();
 
         let range_result = get_editing_range(&document.text, &pos);
         if !range_result.is_some() {
@@ -655,8 +671,8 @@ impl LanguageServer for Backend {
                         detail: None,
                         text_edit: Some(CompletionTextEdit::Edit(TextEdit {
                             range: tower_lsp::lsp_types::Range::new(
-                                document.position_at(range.start.try_into().unwrap()),
-                                document.position_at(range.end.try_into().unwrap()),
+                                document.text.pos_to_lsp_pos(&range.start).unwrap(),
+                                document.text.pos_to_lsp_pos(&range.end).unwrap(),
                             ),
                             new_text: definition
                                 .cleaned_key
@@ -697,17 +713,24 @@ impl LanguageServer for Backend {
             .unwrap()
             .clone();
 
-        let pos = document.offset_at(params.text_document_position_params.position);
+        let pos = document
+            .text
+            .lsp_pos_to_pos(&params.text_document_position_params.position)
+            .unwrap();
 
+            
         match find_translation_key_by_position(&document.text, &pos) {
             Some(translation_key) => {
                 match self.get_definition_detail_by_key(&translation_key.as_str().to_string()) {
                     Some(contents) => {
-                        let key_range = translation_key.range();
+                        let key_range = document
+                            .text
+                            .offset_range_to_range(translation_key.range())
+                            .unwrap();
 
                         let range = tower_lsp::lsp_types::Range::new(
-                            document.position_at(key_range.start.try_into().unwrap()),
-                            document.position_at(key_range.end.try_into().unwrap()),
+                            document.text.pos_to_lsp_pos(&key_range.start).unwrap(),
+                            document.text.pos_to_lsp_pos(&key_range.end).unwrap(),
                         );
 
                         Ok(Some(Hover {
