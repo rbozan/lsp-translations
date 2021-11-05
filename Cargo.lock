@@ -363,6 +363,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "lsp-document"
+version = "0.1.2"
+dependencies = [
+ "lsp-types",
+]
+
+[[package]]
 name = "lsp-translations"
 version = "0.1.0"
 dependencies = [
@@ -372,6 +379,7 @@ dependencies = [
  "glob",
  "itertools",
  "lazy_static",
+ "lsp-document",
  "merge",
  "ntest",
  "pretty_assertions",
