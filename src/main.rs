@@ -30,6 +30,11 @@ mod tests_hover;
 #[cfg(test)]
 mod tests_hover_per_language_file;
 
+
+#[path = "./tests/emoji_document.rs"]
+#[cfg(test)]
+mod tests_emoji_document;
+
 mod lsp_document;
 use crate::lsp_document::FullTextDocument;
 
