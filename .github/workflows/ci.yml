@@ -124,6 +124,7 @@ jobs:
     runs-on: ubuntu-latest
     if: ${{ github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/') }}
     steps:
+      - uses: actions/checkout@v2
       - name: Bump version and push tag
         id: tag_version
         uses: hennejg/github-tag-action@v4.3.1
