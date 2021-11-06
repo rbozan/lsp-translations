@@ -1,3 +1,5 @@
 {
-  "test": "Nederlands"
+  "test": "Nederlands",
+  "blabla": ["test"],
+  "nog iets": {}
 }
