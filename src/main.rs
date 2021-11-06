@@ -49,6 +49,8 @@ use string_helper::get_editing_range;
 use string_helper::TRANSLATION_BEGIN_CHARS;
 use string_helper::TRANSLATION_KEY_DIVIDER;
 
+mod tree_sitter_helper;
+
 use serde_json::json;
 use serde_json::Value;
 use tower_lsp::jsonrpc::{self, Error};
@@ -314,7 +316,9 @@ impl Backend {
             _ => Value::Null,
         };
 
-        let mut new_definitions = self.parse_translation_structure(&value, "".to_string())?;
+        let mut new_definitions = tree_sitter_helper::parse_translation_structure(serde_json::to_string(&value).unwrap());
+
+        // let mut new_definitions = self.parse_translation_structure(&value, "".to_string())?;
 
         // Use file regex language for all above definitions
         let language = self
@@ -765,7 +769,7 @@ struct TranslationFile {
 }
 
 #[derive(Default, Debug)]
-struct Definition {
+pub struct Definition {
     key: String,
     cleaned_key: Option<String>,
     file: Option<TranslationFile>,

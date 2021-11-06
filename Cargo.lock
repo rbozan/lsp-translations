@@ -95,6 +95,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c4872d67bab6358e59559027aa3b9157c53d9358c51423c17554809a8858e0f8"
 
 [[package]]
+name = "cc"
+version = "1.0.71"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "79c2681d6594606957bbb8631c4b90a7fcaaa72cdb714743a437b156d6a7eedd"
+
+[[package]]
 name = "cfg-if"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -375,6 +381,7 @@ dependencies = [
 name = "lsp-translations"
 version = "0.1.0"
 dependencies = [
+ "cc",
  "country-emoji",
  "derive-new",
  "futures",
@@ -394,6 +401,7 @@ dependencies = [
  "tokio",
  "tower-lsp",
  "tower-test",
+ "tree-sitter",
 ]
 
 [[package]]
@@ -904,6 +912,16 @@ dependencies = [
  "tokio-test",
  "tower-layer",
  "tower-service",
+]
+
+[[package]]
+name = "tree-sitter"
+version = "0.20.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "63ec02a07a782abef91279b72fe8fd2bee4c168a22112cedec5d3b0d49b9e4f9"
+dependencies = [
+ "cc",
+ "regex",
 ]
 
 [[package]]
