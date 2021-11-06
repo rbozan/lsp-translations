@@ -20,8 +20,7 @@ glob = "0.3.0"
 itertools = "0.10.1"
 lazy_static = "1.4.0"
 country-emoji = "0.1.2"
-lsp-document = { path = "lsp-document" }
-# lsp-document = "0.1.1"
+lsp-document = "0.2.0"
 
 [dev-dependencies]
 tower-test = "0.4.0"

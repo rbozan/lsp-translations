@@ -364,7 +364,9 @@ dependencies = [
 
 [[package]]
 name = "lsp-document"
-version = "0.1.2"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ec35186d419137cce1246e7cbe9be00c3a014f871ed114c6a379a9b2b377c049"
 dependencies = [
  "lsp-types",
 ]
