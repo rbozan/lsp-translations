@@ -174,8 +174,7 @@ async fn hover_on_unknown_key_returns_nothing() {
 #[timeout(500)]
 async fn hover_without_flag_and_language() {
     let (mut service, _) =
-        prepare_with_workspace_config(&WORKSPACE_CONFIGURATION_REQUEST_WITHOUT_LANGUAGE)
-            .await;
+        prepare_with_workspace_config(&WORKSPACE_CONFIGURATION_REQUEST_WITHOUT_LANGUAGE).await;
 
     assert_eq!(service.call(DID_OPEN_REQUEST.clone()).await, Ok(None));
 

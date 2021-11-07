@@ -1,5 +1,3 @@
-use std::any::Any;
-
 use crate::{Definition, ExtensionConfig};
 use tree_sitter::{Language, Node, Parser};
 
@@ -7,7 +5,10 @@ extern "C" {
     fn tree_sitter_json() -> Language;
 }
 
-pub fn parse_translation_structure(text: String, config: &ExtensionConfig) -> Option<Vec<Definition>> {
+pub fn parse_translation_structure(
+    text: String,
+    config: &ExtensionConfig,
+) -> Option<Vec<Definition>> {
     let mut parser = Parser::new();
 
     let language = unsafe { tree_sitter_json() };
@@ -31,10 +32,8 @@ pub fn parse_tree(
 
     let mut cursor = node.walk();
 
-    if !is_root {
-        if (!cursor.goto_first_child()) {
-            return Some(definitions);
-        }
+    if !is_root && (!cursor.goto_first_child()) {
+        return Some(definitions);
     }
     loop {
         let node = cursor.node();
@@ -72,9 +71,9 @@ pub fn parse_tree(
 
                     definitions.push(Definition {
                         key: new_path.clone(),
-                        cleaned_key: get_cleaned_key_for_path(&new_path, &config),
+                        cleaned_key: get_cleaned_key_for_path(&new_path, config),
                         file: None, // TODO: Fix this
-                        language: get_language_for_path(&new_path, &config),
+                        language: get_language_for_path(&new_path, config),
                         value: text[get_string_content_from_string(value)?.byte_range()]
                             .to_string(),
                     });
@@ -96,7 +95,7 @@ pub fn parse_tree(
                     );
 
                     definitions.append(&mut get_definitions_in_array(
-                        value, &text, &new_path, &config,
+                        value, text, &new_path, config,
                     )?);
                 }
                 _ => {
@@ -107,11 +106,11 @@ pub fn parse_tree(
 
         println!("---");
 
-        let mut child_definitions = parse_tree(&text, new_node, false, new_path, config)?;
+        let mut child_definitions = parse_tree(text, new_node, false, new_path, config)?;
 
         definitions.append(&mut child_definitions);
 
-        if (!cursor.goto_next_sibling()) {
+        if !cursor.goto_next_sibling() {
             break;
         }
     }
@@ -146,7 +145,7 @@ fn get_cleaned_key_for_path(path: &String, config: &ExtensionConfig) -> Option<S
 
 fn get_language_for_path(path: &String, config: &ExtensionConfig) -> Option<String> {
     config.key.details.as_ref().and_then(|key_details_regex| {
-        key_details_regex.captures(&path).and_then(|cap| {
+        key_details_regex.captures(path).and_then(|cap| {
             cap.name("language")
                 .map(|matches| matches.as_str().to_string())
         })
@@ -162,7 +161,7 @@ fn get_definitions_in_array(
     let mut definitions = vec![];
 
     let mut array_cursor = array_node.walk();
-    if (!array_cursor.goto_first_child()) {
+    if !array_cursor.goto_first_child() {
         return Some(definitions);
     }
 
@@ -174,21 +173,21 @@ fn get_definitions_in_array(
 
         new_path = format!("{}[{}]", path, i);
 
-        if (node.kind() == "string") {
+        if node.kind() == "string" {
             definitions.push(Definition {
                 key: new_path.clone(),
-                cleaned_key: get_cleaned_key_for_path(&new_path, &config),
+                cleaned_key: get_cleaned_key_for_path(&new_path, config),
                 file: None, // TODO: Fix this
-                language: get_language_for_path(&new_path, &config),
+                language: get_language_for_path(&new_path, config),
                 value: text[get_string_content_from_string(node)?.byte_range()].to_string(),
             });
         }
 
-        if (!array_cursor.goto_next_sibling()) {
+        if !array_cursor.goto_next_sibling() {
             break;
         }
 
-        if (node.kind() != "[") {
+        if node.kind() != "[" {
             i += 1;
         }
     }

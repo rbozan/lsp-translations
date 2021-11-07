@@ -38,12 +38,12 @@ mod full_text_document;
 use crate::full_text_document::FullTextDocument;
 
 use lsp_document::apply_change;
-use lsp_document::{IndexedText, Pos, TextAdapter, TextMap};
+use lsp_document::{IndexedText, TextAdapter, TextMap};
 
 mod string_helper;
 use crate::string_helper::find_translation_key_by_position;
 use country_emoji::flag;
-use std::convert::TryInto;
+
 use std::path::Path;
 use string_helper::get_editing_range;
 use string_helper::TRANSLATION_BEGIN_CHARS;
@@ -356,9 +356,7 @@ impl Backend {
 
                 Ok(())
             }
-            None => {
-                Err(Box::new(InvalidTranslationFileStructure))
-            }
+            None => Err(Box::new(InvalidTranslationFileStructure)),
         }
     }
 
@@ -564,7 +562,7 @@ impl LanguageServer for Backend {
         &self,
         params: CompletionParams,
     ) -> jsonrpc::Result<Option<CompletionResponse>> {
-        let mut document = self
+        let document = self
             .documents
             .lock()
             .unwrap()
@@ -580,7 +578,7 @@ impl LanguageServer for Backend {
             .unwrap();
 
         let range_result = get_editing_range(&document.text, &pos);
-        if !range_result.is_some() {
+        if range_result.is_none() {
             return Ok(None);
         };
 
@@ -630,7 +628,7 @@ impl LanguageServer for Backend {
     }
 
     async fn hover(&self, params: HoverParams) -> jsonrpc::Result<Option<Hover>> {
-        let mut document = self
+        let document = self
             .documents
             .lock()
             .unwrap()

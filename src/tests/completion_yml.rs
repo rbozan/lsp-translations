@@ -4,7 +4,7 @@ mod helpers;
 use helpers::*;
 
 #[cfg(test)]
-use pretty_assertions::{assert_eq};
+use pretty_assertions::assert_eq;
 
 // use helpers;
 
