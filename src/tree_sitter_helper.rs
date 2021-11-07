@@ -36,7 +36,7 @@ pub fn parse_translation_structure(
 
     let tree = parser.parse(&text, None).unwrap();
 
-    let query = Query::new(language, &query_source).unwrap();
+    let query = Query::new(language, query_source).unwrap();
 
     let mut query_cursor = QueryCursor::new();
 
@@ -45,12 +45,9 @@ pub fn parse_translation_structure(
 
     for m in query_cursor.matches(&query, tree.root_node(), text.as_bytes()) {
         for capture in m.captures {
-            dbg!(&capture);
-
             let capture_name = &query.capture_names()[capture.index as usize];
-            dbg!(capture_name);
 
-            if (capture_name == "translation_value") {
+            if capture_name == "translation_value" {
                 let path = get_path_for_node(capture.node, &text);
 
                 definitions.push(Definition {
@@ -60,13 +57,11 @@ pub fn parse_translation_structure(
                     language: get_language_for_path(&path, config),
                     value: text[capture.node.byte_range()].to_string(),
                 })
-            } else if (capture_name == "translation_error") {
+            } else if capture_name == "translation_error" {
                 eprintln!("Found an error in the translation file");
-                return None
+                return None;
             }
         }
-
-        println!("---------")
     }
 
     Some(definitions)
@@ -76,15 +71,10 @@ fn get_path_for_node(initial_node: Node, text: &String) -> String {
     let mut cursor = initial_node.walk();
     let mut path = String::new();
 
-    println!("get path for node");
-
     loop {
         let node = cursor.node();
-        if (node.kind() == "pair" || node.kind() == "block_mapping_pair") {
-            println!("found a pair!");
-
+        if node.kind() == "pair" || node.kind() == "block_mapping_pair" {
             let key = node.child_by_field_name("key").unwrap();
-            println!("key = {:#?}", key);
 
             let key_string_node = get_string_content_from_string(key).unwrap();
 
@@ -113,7 +103,7 @@ fn get_path_for_node(initial_node: Node, text: &String) -> String {
     }
 
     // As the dot is always being added, it should be removed for the last match
-    if path.chars().nth(0) == Some('.') {
+    if path.starts_with('.') {
         path = path[1..].to_string();
     }
     path
@@ -150,9 +140,9 @@ fn get_string_content_from_string(string: Node) -> Option<Node> {
             return Some(node);
         }
 
-        if (node.kind() == "plain_scalar") {
+        if node.kind() == "plain_scalar" {
             let result = get_string_content_from_string(node);
-            if (result.is_some()) {
+            if result.is_some() {
                 return result;
             };
         }

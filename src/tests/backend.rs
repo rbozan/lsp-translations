@@ -77,7 +77,6 @@ lazy_static! {
                 .to_str()
                 .unwrap()
                 .escape_default()
-                .to_string()
         )
         .as_str()
     )
