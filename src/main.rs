@@ -65,6 +65,8 @@ use std::io::BufReader;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
+use std::fs;
+
 use itertools::Itertools;
 
 #[macro_use]
@@ -305,20 +307,22 @@ impl Backend {
 
     /// Reads the translations from a single file and adds them to the `definitions`
     fn read_translation(&self, path: &Path) -> Result<(), Box<dyn std::error::Error>> {
-        let file = File::open(path)?;
-        let reader = BufReader::new(file);
-        let ext = path.extension().and_then(OsStr::to_str);
+        let file = fs::read_to_string(path)?;
 
-        let value = match ext {
-            Some("json") => serde_json::from_reader(reader)?,
-            Some("yaml") | Some("yml") => serde_yaml::from_reader(reader)?,
-            _ => Value::Null,
+        let ext = path.extension().and_then(OsStr::to_str);
+        if ext.is_none() {
+            return Err(Box::new(InvalidTranslationFileStructure));
         };
 
-        // TODO: Use normal file reader for yaml and json intead of converting Value to string.
+        let language = tree_sitter_helper::get_language_by_extension(ext.unwrap());
+        if language.is_none() {
+            return Err(Box::new(InvalidTranslationFileStructure));
+        }
+
         let new_definitions_result = tree_sitter_helper::parse_translation_structure(
-            serde_json::to_string(&value).unwrap(),
+            file,
             self.config.lock().unwrap().get_mut(),
+            language.unwrap(),
         );
 
         match new_definitions_result {
