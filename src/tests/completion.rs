@@ -1,7 +1,5 @@
 use tower_lsp::jsonrpc::{Incoming, Outgoing};
 
-use std::env;
-
 mod helpers;
 use helpers::*;
 

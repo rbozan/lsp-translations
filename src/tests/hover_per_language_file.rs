@@ -1,4 +1,4 @@
-use tower_lsp::jsonrpc::{Incoming, Outgoing, Response};
+use tower_lsp::jsonrpc::{Incoming, Outgoing};
 
 mod helpers;
 use helpers::*;
