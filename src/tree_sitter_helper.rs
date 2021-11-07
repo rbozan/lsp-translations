@@ -1,3 +1,5 @@
+use std::ops::Range;
+
 use crate::{Definition, ExtensionConfig};
 use tree_sitter::{Language, Node, Parser, Query, QueryCursor};
 
@@ -17,7 +19,7 @@ pub fn get_language_by_extension(ext: &str) -> Option<Language> {
 pub fn get_query_source_by_language(ext: &str) -> Option<&str> {
     match ext {
         "json" => Some(include_str!("./queries/json.scm")),
-        "yaml" | "yml" => Some("./queries/yaml.scm"),
+        "yaml" | "yml" => Some(include_str!("./queries/yaml.scm")),
         _ => None,
     }
 }
@@ -36,16 +38,12 @@ pub fn parse_translation_structure(
 
     let query = Query::new(language, &query_source).unwrap();
 
-    dbg!(query.capture_names());
-
     let mut query_cursor = QueryCursor::new();
 
     // Execute matches
     let mut definitions = vec![];
 
     for m in query_cursor.matches(&query, tree.root_node(), text.as_bytes()) {
-        dbg!(&m);
-
         for capture in m.captures {
             dbg!(&capture);
 
@@ -62,6 +60,9 @@ pub fn parse_translation_structure(
                     language: get_language_for_path(&path, config),
                     value: text[capture.node.byte_range()].to_string(),
                 })
+            } else if (capture_name == "translation_error") {
+                eprintln!("Found an error in the translation file");
+                return None
             }
         }
 
@@ -79,7 +80,7 @@ fn get_path_for_node(initial_node: Node, text: &String) -> String {
 
     loop {
         let node = cursor.node();
-        if (node.kind() == "pair") {
+        if (node.kind() == "pair" || node.kind() == "block_mapping_pair") {
             println!("found a pair!");
 
             let key = node.child_by_field_name("key").unwrap();
@@ -87,20 +88,33 @@ fn get_path_for_node(initial_node: Node, text: &String) -> String {
 
             let key_string_node = get_string_content_from_string(key).unwrap();
 
-            path = format!(
-                "{}{}{}",
-                text[key_string_node.byte_range()].to_string(),
-                if !path.is_empty() { "." } else { "" },
-                &path,
-            );
-        }
+            let range = match key_string_node.kind() {
+                "single_quote_scalar" | "double_quote_scalar" => {
+                    let original_range = key_string_node.byte_range();
+                    Range {
+                        start: original_range.start + 1,
+                        end: original_range.end - 1,
+                    }
+                }
+                _ => key_string_node.byte_range(),
+            };
 
-        println!("parent node {:?}", node);
+            path = format!(".{}{}", text[range].to_string(), &path,);
+        } else if (node.kind() == "block_sequence_item") {
+            let index = get_array_index_of_node(node).unwrap();
+
+            path = format!("[{}]{}", index, &path);
+        }
 
         match node.parent() {
             Some(parent_node) => cursor.reset(parent_node),
             None => break,
         }
+    }
+
+    // As the dot is always being added, it should be removed for the last match
+    if path.chars().nth(0) == Some('.') {
+        path = path[1..].to_string();
     }
     path
 }
@@ -114,19 +128,30 @@ static STRING_CONTENT_KINDS: &[&str] = &[
     "double_quote_scalar",
 ];
 
+fn get_array_index_of_node(node: Node) -> Option<usize> {
+    let parent_node = node.parent()?;
+
+    let mut cursor = parent_node.walk();
+    for (index, child_node) in parent_node.children(&mut cursor).enumerate() {
+        if child_node == node {
+            return Some(index);
+        }
+    }
+    None
+}
+
 fn get_string_content_from_string(string: Node) -> Option<Node> {
     let mut value_cursor = string.walk();
     value_cursor.goto_first_child();
 
     loop {
-        if STRING_CONTENT_KINDS.contains(&value_cursor.node().kind()) {
-            return Some(value_cursor.node());
+        let node = value_cursor.node();
+        if STRING_CONTENT_KINDS.contains(&node.kind()) {
+            return Some(node);
         }
 
-        println!("Is het child? {:?}", value_cursor.node());
-
-        if (value_cursor.node().kind() == "plain_scalar") {
-            let result = get_string_content_from_string(value_cursor.node());
+        if (node.kind() == "plain_scalar") {
+            let result = get_string_content_from_string(node);
             if (result.is_some()) {
                 return result;
             };

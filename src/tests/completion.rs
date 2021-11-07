@@ -44,9 +44,9 @@ lazy_static! {
   "result": [
     {
       "kind": 1,
-      "label": "main.content.heading.body",
+      "label": "main.header.title",
       "textEdit": {
-          "newText": "main.content.heading.body",
+          "newText": "main.header.title",
           "range": {
               "start": { "character": 11, "line": 0 },
               "end": { "character": 11, "line": 0 }
@@ -66,9 +66,9 @@ lazy_static! {
     },
     {
       "kind": 1,
-      "label": "main.header.title",
+      "label": "main.content.heading.body",
       "textEdit": {
-          "newText": "main.header.title",
+          "newText": "main.content.heading.body",
           "range": {
               "start": { "character": 11, "line": 0 },
               "end": { "character": 11, "line": 0 }

@@ -325,12 +325,11 @@ impl Backend {
             return Err(Box::new(InvalidTranslationFileStructure));
         }
 
-
         let new_definitions_result = tree_sitter_helper::parse_translation_structure(
             file,
             self.config.lock().unwrap().get_mut(),
             language.unwrap(),
-            query_source.unwrap()
+            query_source.unwrap(),
         );
 
         match new_definitions_result {
@@ -353,7 +352,7 @@ impl Backend {
                             })
                     });
 
-                let translation_file = TranslationFile {
+                let translation_file = DefinitionSource {
                     path: path.to_path_buf(),
                     language,
                 };
@@ -622,7 +621,6 @@ impl LanguageServer for Backend {
                     .collect(),
             )))
         } else {
-            eprintln!("Gaat fout");
             Err(Error::internal_error())
         }
     }
@@ -695,7 +693,7 @@ async fn main() {
 }
 
 #[derive(Debug, Clone)]
-struct TranslationFile {
+struct DefinitionSource {
     path: PathBuf,
     language: Option<String>,
 }
@@ -704,7 +702,7 @@ struct TranslationFile {
 pub struct Definition {
     key: String,
     cleaned_key: Option<String>,
-    file: Option<TranslationFile>,
+    file: Option<DefinitionSource>,
     language: Option<String>,
     value: String,
 }
