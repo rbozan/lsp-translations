@@ -68,6 +68,8 @@ use std::fs;
 
 use itertools::Itertools;
 
+use std::time::Instant;
+
 #[macro_use]
 extern crate derive_new;
 
@@ -428,13 +430,16 @@ impl Backend {
 
         match config {
             Ok(config) => {
+                let now = Instant::now();
+
                 self.fetch_translations(config[0].clone()).await;
                 self.client
                     .log_message(
                         MessageType::Info,
                         format!(
-                            "Loaded {:} definitions",
-                            self.definitions.lock().unwrap().get_mut().len()
+                            "Loaded {:} definitions in {:#?}",
+                            self.definitions.lock().unwrap().get_mut().len(),
+                            now.elapsed()
                         ),
                     )
                     .await;
