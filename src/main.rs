@@ -320,10 +320,17 @@ impl Backend {
             return Err(Box::new(InvalidTranslationFileStructure));
         }
 
+        let query_source = tree_sitter_helper::get_query_source_by_language(ext.unwrap());
+        if query_source.is_none() {
+            return Err(Box::new(InvalidTranslationFileStructure));
+        }
+
+
         let new_definitions_result = tree_sitter_helper::parse_translation_structure(
             file,
             self.config.lock().unwrap().get_mut(),
             language.unwrap(),
+            query_source.unwrap()
         );
 
         match new_definitions_result {
