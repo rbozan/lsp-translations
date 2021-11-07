@@ -3,15 +3,24 @@ use tree_sitter::{Language, Node, Parser};
 
 extern "C" {
     fn tree_sitter_json() -> Language;
+    fn tree_sitter_yaml() -> Language;
+}
+
+pub fn get_language_by_extension(ext: &str) -> Option<Language> {
+    match ext {
+        "json" => Some(unsafe { tree_sitter_json() }),
+        "yaml" | "yml" => Some(unsafe { tree_sitter_yaml() }),
+        _ => None,
+    }
 }
 
 pub fn parse_translation_structure(
     text: String,
     config: &ExtensionConfig,
+    language: Language,
 ) -> Option<Vec<Definition>> {
     let mut parser = Parser::new();
 
-    let language = unsafe { tree_sitter_json() };
     parser.set_language(language).unwrap();
 
     let tree = parser.parse(&text, None).unwrap();
@@ -50,7 +59,7 @@ pub fn parse_tree(
             value
         );
 
-        if node.kind() == "pair" {
+        if node.kind() == "pair" || node.kind() == "block_mapping_pair" {
             let key = node.child_by_field_name("key")?;
             println!("key = {:#?}", key);
 
@@ -99,6 +108,7 @@ pub fn parse_tree(
                     )?);
                 }
                 _ => {
+                    println!("Unknown type received");
                     return None;
                 }
             }
@@ -118,13 +128,31 @@ pub fn parse_tree(
     Some(definitions)
 }
 
+static STRING_CONTENT_KINDS: &[&str] = &[
+    // JSON
+    "string_content",
+    // YAML
+    "string_scalar",
+    "single_quote_scalar",
+    "double_quote_scalar",
+];
+
 fn get_string_content_from_string(string: Node) -> Option<Node> {
     let mut value_cursor = string.walk();
     value_cursor.goto_first_child();
 
     loop {
-        if value_cursor.node().kind() == "string_content" {
+        if STRING_CONTENT_KINDS.contains(&value_cursor.node().kind()) {
             return Some(value_cursor.node());
+        }
+
+        println!("Is het child? {:?}", value_cursor.node());
+
+        if (value_cursor.node().kind() == "plain_scalar") {
+            let result = get_string_content_from_string(value_cursor.node());
+            if (result.is_some()) {
+                return result;
+            };
         }
 
         if !value_cursor.goto_next_sibling() {

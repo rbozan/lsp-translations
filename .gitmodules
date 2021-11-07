@@ -1,3 +1,6 @@
 [submodule "tree-sitter/tree-sitter-json"]
 	path = tree-sitter/tree-sitter-json
 	url = https://github.com/tree-sitter/tree-sitter-json.git
+[submodule "tree-sitter/tree-sitter-yaml"]
+	path = tree-sitter/tree-sitter-yaml
+	url = https://github.com/ikatyang/tree-sitter-yaml.git
