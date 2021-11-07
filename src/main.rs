@@ -60,8 +60,7 @@ use tower_lsp::{Client, LanguageServer, LspService, Server};
 use glob::glob;
 use serde::Deserialize;
 use std::cell::Cell;
-use std::fs::File;
-use std::io::BufReader;
+
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
