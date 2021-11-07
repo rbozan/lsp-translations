@@ -1,4 +1,7 @@
-use tower_lsp::jsonrpc::{Incoming, Outgoing};
+use tower_lsp::{
+    jsonrpc::{Incoming, Outgoing, Response},
+    lsp_types::{CompletionItem, CompletionItemKind, CompletionTextEdit, Position, TextEdit},
+};
 
 mod helpers;
 use helpers::*;
@@ -67,172 +70,47 @@ lazy_static! {
         }"#
     )
     .unwrap();
-    static ref COMPLETION_RESPONSE: Outgoing = Outgoing::Response(
-        serde_json::from_str(
-            r#"
-{
-   "jsonrpc":"2.0",
-   "result":[
-      {
-         "kind":1,
-         "label":"accounts.edit.new_password",
-         "textEdit":{
-            "newText":"accounts.edit.new_password",
-            "range":{
-               "start":{
-                  "character":11,
-                  "line":0
-               },
-               "end":{
-                  "character":11,
-                  "line":0
-               }
-            }
-         }
-      },
-      {
-         "kind":1,
-         "label":"accounts.edit.update",
-         "textEdit":{
-            "newText":"accounts.edit.update",
-            "range":{
-               "start":{
-                  "character":11,
-                  "line":0
-               },
-               "end":{
-                  "character":11,
-                  "line":0
-               }
-            }
-         }
-      },
-      {
-         "kind":1,
-         "label":"employees.assigned_employees.assigned_employee.main_dta",
-         "textEdit":{
-            "newText":"employees.assigned_employees.assigned_employee.main_dta",
-            "range":{
-               "start":{
-                  "character":11,
-                  "line":0
-               },
-               "end":{
-                  "character":11,
-                  "line":0
-               }
-            }
-         }
-      },
-      {
-         "kind":1,
-         "label":"simple_form.confirm_registration",
-         "textEdit":{
-            "newText":"simple_form.confirm_registration",
-            "range":{
-               "start":{
-                  "character":11,
-                  "line":0
-               },
-               "end":{
-                  "character":11,
-                  "line":0
-               }
-            }
-         }
-      },
-      {
-         "kind":1,
-         "label":"simple_form.date.abbr_day_names[0]",
-         "textEdit":{
-            "newText":"simple_form.date.abbr_day_names[0]",
-            "range":{
-               "start":{
-                  "character":11,
-                  "line":0
-               },
-               "end":{
-                  "character":11,
-                  "line":0
-               }
-            }
-         }
-      },
-      {
-         "kind":1,
-         "label":"simple_form.formats.default",
-         "textEdit":{
-            "newText":"simple_form.formats.default",
-            "range":{
-               "start":{
-                  "character":11,
-                  "line":0
-               },
-               "end":{
-                  "character":11,
-                  "line":0
-               }
-            }
-         }
-      },
-      {
-         "kind":1,
-         "label":"simple_form.new_model",
-         "textEdit":{
-            "newText":"simple_form.new_model",
-            "range":{
-               "start":{
-                  "character":11,
-                  "line":0
-               },
-               "end":{
-                  "character":11,
-                  "line":0
-               }
-            }
-         }
-      },
-      {
-         "kind":1,
-         "label":"simple_form.no",
-         "textEdit":{
-            "newText":"simple_form.no",
-            "range":{
-               "start":{
-                  "character":11,
-                  "line":0
-               },
-               "end":{
-                  "character":11,
-                  "line":0
-               }
-            }
-         }
-      },
-      {
-         "kind":1,
-         "label":"simple_form.required.mark",
-         "textEdit":{
-            "newText":"simple_form.required.mark",
-            "range":{
-               "start":{
-                  "character":11,
-                  "line":0
-               },
-               "end":{
-                  "character":11,
-                  "line":0
-               }
-            }
-         }
-      }
-   ],
-   "id": 2
-}
-"#
-        )
-        .unwrap()
-    );
+    static ref COMPLETION_RESPONSE: Outgoing = {
+        let keys = [
+            "accounts.edit.new_password",
+            "accounts.edit.update",
+            "employees.assigned_employees.assigned_employee.main_dta",
+            "simple_form.no",
+            "simple_form.required.mark",
+            "simple_form.new_model",
+            "simple_form.confirm_registration",
+            "simple_form.date.abbr_day_names[0]",
+            "simple_form.formats.default",
+        ];
+
+        let completion_items = keys
+            .iter()
+            .map(|key| CompletionItem {
+                label: key.to_string(),
+                kind: Some(CompletionItemKind::Text),
+                detail: None,
+                text_edit: Some(CompletionTextEdit::Edit(TextEdit {
+                    range: tower_lsp::lsp_types::Range::new(
+                        Position {
+                            line: 0,
+                            character: 11,
+                        },
+                        Position {
+                            line: 0,
+                            character: 11,
+                        },
+                    ),
+                    new_text: key.to_string(),
+                })),
+                ..Default::default()
+            })
+            .collect::<Vec<CompletionItem>>();
+
+        return Outgoing::Response(Response::ok(
+            tower_lsp::jsonrpc::Id::Number(2),
+            serde_json::to_value(completion_items).unwrap(),
+        ));
+    };
 }
 
 #[tokio::test]
