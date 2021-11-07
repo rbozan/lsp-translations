@@ -1,5 +1,5 @@
 use crate::{Definition, ExtensionConfig};
-use tree_sitter::{Language, Node, Parser};
+use tree_sitter::{Language, Node, Parser, Query, QueryCursor};
 
 extern "C" {
     fn tree_sitter_json() -> Language;
@@ -14,10 +14,19 @@ pub fn get_language_by_extension(ext: &str) -> Option<Language> {
     }
 }
 
+pub fn get_query_source_by_language(ext: &str) -> Option<&str> {
+    match ext {
+        "json" => Some(include_str!("./queries/json.scm")),
+        "yaml" | "yml" => Some("./queries/yaml.scm"),
+        _ => None,
+    }
+}
+
 pub fn parse_translation_structure(
     text: String,
     config: &ExtensionConfig,
     language: Language,
+    query_source: &str,
 ) -> Option<Vec<Definition>> {
     let mut parser = Parser::new();
 
@@ -25,107 +34,75 @@ pub fn parse_translation_structure(
 
     let tree = parser.parse(&text, None).unwrap();
 
-    let definitions = parse_tree(&text, tree.root_node(), true, "".to_string(), config);
-    println!("Definitions found: {:#?}", definitions);
-    definitions
-}
+    let query = Query::new(language, &query_source).unwrap();
 
-pub fn parse_tree(
-    text: &String,
-    node: Node,
-    is_root: bool,
-    path: String,
-    config: &ExtensionConfig,
-) -> Option<Vec<Definition>> {
+    dbg!(query.capture_names());
+
+    let mut query_cursor = QueryCursor::new();
+
+    // Execute matches
     let mut definitions = vec![];
 
-    let mut cursor = node.walk();
+    for m in query_cursor.matches(&query, tree.root_node(), text.as_bytes()) {
+        dbg!(&m);
 
-    if !is_root && (!cursor.goto_first_child()) {
-        return Some(definitions);
-    }
-    loop {
-        let node = cursor.node();
-        let range = node.byte_range();
-        let value = &text[range];
-        let mut new_path = path.clone();
-        let mut new_node = node;
+        for capture in m.captures {
+            dbg!(&capture);
 
-        println!(
-            "cursor node ${:?}, kind {:?}, type {:?}, utf8text {:?}",
-            node,
-            node.kind(),
-            cursor.field_name(),
-            value
-        );
+            let capture_name = &query.capture_names()[capture.index as usize];
+            dbg!(capture_name);
 
-        if node.kind() == "pair" || node.kind() == "block_mapping_pair" {
-            let key = node.child_by_field_name("key")?;
-            println!("key = {:#?}", key);
+            if (capture_name == "translation_value") {
+                let path = get_path_for_node(capture.node, &text);
 
-            let key_string_node = get_string_content_from_string(key)?;
-
-            let value = node.child_by_field_name("value")?;
-            println!("value = {:#?}", value);
-            new_node = value;
-
-            match value.kind() {
-                "string" => {
-                    new_path = format!(
-                        "{}{}{}",
-                        &path,
-                        if !path.is_empty() { "." } else { "" },
-                        text[key_string_node.byte_range()].to_string()
-                    );
-
-                    definitions.push(Definition {
-                        key: new_path.clone(),
-                        cleaned_key: get_cleaned_key_for_path(&new_path, config),
-                        file: None, // TODO: Fix this
-                        language: get_language_for_path(&new_path, config),
-                        value: text[get_string_content_from_string(value)?.byte_range()]
-                            .to_string(),
-                    });
-                }
-                "object" => {
-                    new_path = format!(
-                        "{}{}{}",
-                        &path,
-                        if !path.is_empty() { "." } else { "" },
-                        text[key_string_node.byte_range()].to_string()
-                    );
-                }
-                "array" => {
-                    new_path = format!(
-                        "{}{}{}",
-                        &path,
-                        if !path.is_empty() { "." } else { "" },
-                        text[key_string_node.byte_range()].to_string()
-                    );
-
-                    definitions.append(&mut get_definitions_in_array(
-                        value, text, &new_path, config,
-                    )?);
-                }
-                _ => {
-                    println!("Unknown type received");
-                    return None;
-                }
+                definitions.push(Definition {
+                    key: path.clone(),
+                    cleaned_key: get_cleaned_key_for_path(&path, config),
+                    file: None,
+                    language: get_language_for_path(&path, config),
+                    value: text[capture.node.byte_range()].to_string(),
+                })
             }
         }
 
-        println!("---");
-
-        let mut child_definitions = parse_tree(text, new_node, false, new_path, config)?;
-
-        definitions.append(&mut child_definitions);
-
-        if !cursor.goto_next_sibling() {
-            break;
-        }
+        println!("---------")
     }
 
     Some(definitions)
+}
+
+fn get_path_for_node(initial_node: Node, text: &String) -> String {
+    let mut cursor = initial_node.walk();
+    let mut path = String::new();
+
+    println!("get path for node");
+
+    loop {
+        let node = cursor.node();
+        if (node.kind() == "pair") {
+            println!("found a pair!");
+
+            let key = node.child_by_field_name("key").unwrap();
+            println!("key = {:#?}", key);
+
+            let key_string_node = get_string_content_from_string(key).unwrap();
+
+            path = format!(
+                "{}{}{}",
+                text[key_string_node.byte_range()].to_string(),
+                if !path.is_empty() { "." } else { "" },
+                &path,
+            );
+        }
+
+        println!("parent node {:?}", node);
+
+        match node.parent() {
+            Some(parent_node) => cursor.reset(parent_node),
+            None => break,
+        }
+    }
+    path
 }
 
 static STRING_CONTENT_KINDS: &[&str] = &[
@@ -178,47 +155,4 @@ fn get_language_for_path(path: &String, config: &ExtensionConfig) -> Option<Stri
                 .map(|matches| matches.as_str().to_string())
         })
     })
-}
-
-fn get_definitions_in_array(
-    array_node: Node,
-    text: &String,
-    path: &String,
-    config: &ExtensionConfig,
-) -> Option<Vec<Definition>> {
-    let mut definitions = vec![];
-
-    let mut array_cursor = array_node.walk();
-    if !array_cursor.goto_first_child() {
-        return Some(definitions);
-    }
-
-    let mut i = 0;
-
-    loop {
-        let node = array_cursor.node();
-        let mut new_path = path.clone();
-
-        new_path = format!("{}[{}]", path, i);
-
-        if node.kind() == "string" {
-            definitions.push(Definition {
-                key: new_path.clone(),
-                cleaned_key: get_cleaned_key_for_path(&new_path, config),
-                file: None, // TODO: Fix this
-                language: get_language_for_path(&new_path, config),
-                value: text[get_string_content_from_string(node)?.byte_range()].to_string(),
-            });
-        }
-
-        if !array_cursor.goto_next_sibling() {
-            break;
-        }
-
-        if node.kind() != "[" {
-            i += 1;
-        }
-    }
-
-    Some(definitions)
 }
