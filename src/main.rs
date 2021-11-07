@@ -207,7 +207,7 @@ impl Backend {
         let folders = self.client.workspace_folders().await.unwrap().unwrap();
 
         self.client
-            .log_message(MessageType::Info, format!("folders: {:?}", folders))
+            .log_message(MessageType::Info, format!("Workspace folders: {:?}", folders))
             .await;
 
         let files: Vec<PathBuf> = self
@@ -429,10 +429,6 @@ impl Backend {
 
         match config {
             Ok(config) => {
-                self.client
-                    .log_message(MessageType::Log, format!("config received {:?}", config))
-                    .await;
-
                 self.fetch_translations(config[0].clone()).await;
                 self.client
                     .log_message(
@@ -496,37 +492,21 @@ impl LanguageServer for Backend {
     }
 
     async fn did_change_workspace_folders(&self, _: DidChangeWorkspaceFoldersParams) {
-        self.client
-            .log_message(MessageType::Info, "workspace folders changed!")
-            .await;
-
         // TODO: Do not refetch configuration
         self.read_config().await;
     }
 
     async fn did_change_configuration(&self, _: DidChangeConfigurationParams) {
-        self.client
-            .log_message(MessageType::Info, "configuration changed!")
-            .await;
-
         // TODO: Do not refetch configuration but use params
         self.read_config().await;
     }
 
     async fn did_change_watched_files(&self, _: DidChangeWatchedFilesParams) {
-        self.client
-            .log_message(MessageType::Info, "watched files have changed!")
-            .await;
-
         // TODO: Do not refetch configuration but use params
         self.read_config().await;
     }
 
     async fn did_open(&self, params: DidOpenTextDocumentParams) {
-        self.client
-            .log_message(MessageType::Info, "file opened!")
-            .await;
-
         self.documents
             .lock()
             .unwrap()
@@ -557,10 +537,6 @@ impl LanguageServer for Backend {
     }
 
     async fn did_close(&self, params: DidCloseTextDocumentParams) {
-        self.client
-            .log_message(MessageType::Info, "file closed!")
-            .await;
-
         self.documents
             .lock()
             .unwrap()
