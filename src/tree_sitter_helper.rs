@@ -99,8 +99,8 @@ fn get_path_for_node(initial_node: Node, text: &String) -> String {
                 _ => key_string_node.byte_range(),
             };
 
-            path = format!(".{}{}", text[range].to_string(), &path,);
-        } else if (node.kind() == "block_sequence_item") {
+            path = format!(".{}{}", &text[range], &path,);
+        } else if node.kind() == "block_sequence_item" {
             let index = get_array_index_of_node(node).unwrap();
 
             path = format!("[{}]{}", index, &path);

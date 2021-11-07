@@ -106,10 +106,10 @@ lazy_static! {
             })
             .collect::<Vec<CompletionItem>>();
 
-        return Outgoing::Response(Response::ok(
+        Outgoing::Response(Response::ok(
             tower_lsp::jsonrpc::Id::Number(2),
             serde_json::to_value(completion_items).unwrap(),
-        ));
+        ))
     };
 }
 
