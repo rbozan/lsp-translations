@@ -162,7 +162,7 @@ struct KeyConfig {
 
 #[derive(Deserialize, Debug, Default, Clone)]
 #[serde(rename_all = "camelCase")]
-struct ExtensionConfig {
+pub struct ExtensionConfig {
     translation_files: TranslationFilesConfig,
     file_name: FileNameConfig,
     #[serde(default)]
@@ -316,127 +316,50 @@ impl Backend {
             _ => Value::Null,
         };
 
-        let mut new_definitions = tree_sitter_helper::parse_translation_structure(serde_json::to_string(&value).unwrap());
+        // TODO: Use normal file reader for yaml and json intead of converting Value to string.
+        let new_definitions_result = tree_sitter_helper::parse_translation_structure(
+            serde_json::to_string(&value).unwrap(),
+            self.config.lock().unwrap().get_mut(),
+        );
 
-        // let mut new_definitions = self.parse_translation_structure(&value, "".to_string())?;
-
-        // Use file regex language for all above definitions
-        let language = self
-            .config
-            .lock()
-            .unwrap()
-            .get_mut()
-            .file_name
-            .details
-            .as_ref()
-            .and_then(|file_name_details_regex| {
-                file_name_details_regex
-                    .captures(path.file_name().unwrap().to_str().unwrap())
-                    .and_then(|cap| {
-                        cap.name("language")
-                            .map(|matches| matches.as_str().to_string())
-                    })
-            });
-
-        let translation_file = TranslationFile {
-            path: path.to_path_buf(),
-            language,
-        };
-
-        for definition in new_definitions.iter_mut() {
-            definition.file = Some(translation_file.clone());
-        }
-
-        let mut definitions = self.definitions.lock().unwrap();
-        new_definitions.append(definitions.get_mut());
-        definitions.set(new_definitions);
-
-        Ok(())
-    }
-
-    /// Recursively goes through all the keys and convert them to `Vec<Definition>`
-    fn parse_translation_structure(
-        &self,
-        value: &Value,
-        json_path: String,
-    ) -> Result<Vec<Definition>, InvalidTranslationFileStructure> {
-        let mut definitions = vec![];
-
-        let result: Result<(), InvalidTranslationFileStructure> =
-            match value {
-                Value::Object(values) => {
-                    for (key, value) in values.iter() {
-                        definitions.append(&mut self.parse_translation_structure(
-                            value,
-                            format!(
-                                "{}{}{}",
-                                json_path,
-                                if !json_path.is_empty() { "." } else { "" },
-                                key
-                            ),
-                        )?);
-                    }
-
-                    Ok(())
-                }
-
-                Value::Array(values) => {
-                    for (key, value) in values.iter().enumerate() {
-                        definitions.append(&mut self.parse_translation_structure(
-                            value,
-                            format!("{}[{}]", json_path, key),
-                        )?);
-                    }
-
-                    Ok(())
-                }
-                Value::String(value) => {
-                    let cleaned_key = self
-                        .config
-                        .lock()
-                        .unwrap()
-                        .get_mut()
-                        .key
-                        .filter
-                        .as_ref()
-                        .and_then(|key_filter_regex| {
-                            key_filter_regex
-                                .captures(&json_path.replace("\n", ""))
-                                .and_then(|cap| cap.get(1).map(|group| group.as_str().to_string()))
-                        });
-
-                    let language = &self
-                        .config
-                        .lock()
-                        .unwrap()
-                        .get_mut()
-                        .key
-                        .details
-                        .as_ref()
-                        .and_then(|key_details_regex| {
-                            key_details_regex.captures(&json_path).and_then(|cap| {
+        match new_definitions_result {
+            Some(mut new_definitions) => {
+                // Use file regex language for all above definitions
+                let language = self
+                    .config
+                    .lock()
+                    .unwrap()
+                    .get_mut()
+                    .file_name
+                    .details
+                    .as_ref()
+                    .and_then(|file_name_details_regex| {
+                        file_name_details_regex
+                            .captures(path.file_name().unwrap().to_str().unwrap())
+                            .and_then(|cap| {
                                 cap.name("language")
                                     .map(|matches| matches.as_str().to_string())
                             })
-                        });
-
-                    // key_filter_regex.captures_iter(&json_path).intersperse(".").collect();
-                    definitions.push(Definition {
-                        key: json_path,
-                        cleaned_key,
-                        value: value.to_string(),
-                        language: language.clone(),
-                        ..Default::default()
                     });
 
-                    Ok(())
-                }
-                _ => Err(InvalidTranslationFileStructure),
-            };
+                let translation_file = TranslationFile {
+                    path: path.to_path_buf(),
+                    language,
+                };
 
-        match result {
-            Ok(()) => Ok(definitions),
-            Err(err) => Err(err),
+                for definition in new_definitions.iter_mut() {
+                    definition.file = Some(translation_file.clone());
+                }
+
+                let mut definitions = self.definitions.lock().unwrap();
+                new_definitions.append(definitions.get_mut());
+                definitions.set(new_definitions);
+
+                Ok(())
+            }
+            None => {
+                Err(Box::new(InvalidTranslationFileStructure))
+            }
         }
     }
 
