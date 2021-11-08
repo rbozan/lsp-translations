@@ -250,8 +250,6 @@ impl Backend {
         config: &ExtensionConfig,
         folders: &Vec<WorkspaceFolder>,
     ) -> Result<(), Error> {
-        let trim_start: &[_] = &['.', '/'];
-
         let watched_patterns = DidChangeWatchedFilesRegistrationOptions {
             watchers: folders
                 .iter()
@@ -260,16 +258,19 @@ impl Backend {
                         .translation_files
                         .include
                         .iter()
-                        .map(|pattern| FileSystemWatcher {
-                            glob_pattern: folder
-                                .uri
-                                .to_file_path()
-                                .unwrap()
-                                .join(PathBuf::from(pattern.trim_start_matches(trim_start)))
-                                .to_str()
-                                .unwrap()
-                                .to_string(),
-                            kind: None,
+                        .map(|pattern| {
+                            FileSystemWatcher {
+                                glob_pattern: path_clean::clean(
+                                    folder
+                                        .uri
+                                        .to_file_path()
+                                        .unwrap()
+                                        .join(PathBuf::from(pattern))
+                                        .to_str()
+                                        .unwrap(),
+                                ),
+                                kind: None,
+                            }
                         })
                         .collect::<Vec<FileSystemWatcher>>()
                 })
@@ -718,7 +719,6 @@ impl LanguageServer for Backend {
             .lsp_pos_to_pos(&params.text_document_position_params.position)
             .unwrap();
 
-            
         match find_translation_key_by_position(&document.text, &pos) {
             Some(translation_key) => {
                 match self.get_definition_detail_by_key(&translation_key.as_str().to_string()) {
