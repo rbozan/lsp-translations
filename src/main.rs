@@ -209,7 +209,10 @@ impl Backend {
         let folders = self.client.workspace_folders().await.unwrap().unwrap();
 
         self.client
-            .log_message(MessageType::Info, format!("Workspace folders: {:?}", folders))
+            .log_message(
+                MessageType::Info,
+                format!("Workspace folders: {:?}", folders),
+            )
             .await;
 
         let files: Vec<PathBuf> = self
@@ -330,6 +333,7 @@ impl Backend {
             self.config.lock().unwrap().get_mut(),
             language.unwrap(),
             query_source.unwrap(),
+            path,
         );
 
         match new_definitions_result {
@@ -352,13 +356,13 @@ impl Backend {
                             })
                     });
 
-                let translation_file = DefinitionSource {
-                    path: path.to_path_buf(),
-                    language,
-                };
-
-                for definition in new_definitions.iter_mut() {
-                    definition.file = Some(translation_file.clone());
+                // TODO: Remove this and pass it to parse_translation_structure
+                for mut definition in new_definitions.iter_mut() {
+                    if let Some(source) = &definition.source {
+                        let mut new_source = source.clone();
+                        new_source.language = language.clone();
+                        definition.source = Some(new_source);
+                    }
                 }
 
                 let mut definitions = self.definitions.lock().unwrap();
@@ -473,6 +477,7 @@ impl LanguageServer for Backend {
                     work_done_progress_options: Default::default(),
                     all_commit_characters: None,
                 }),
+                definition_provider: Some(OneOf::Left(true)),
                 workspace: Some(WorkspaceServerCapabilities {
                     workspace_folders: Some(WorkspaceFoldersServerCapabilities {
                         supported: Some(true),
@@ -657,6 +662,85 @@ impl LanguageServer for Backend {
             None => Ok(None),
         }
     }
+
+    async fn goto_definition(
+        &self,
+        params: GotoDefinitionParams,
+    ) -> jsonrpc::Result<Option<GotoDefinitionResponse>> {
+        eprintln!("goto definition {:?}", params);
+
+        let document = self
+            .documents
+            .lock()
+            .unwrap()
+            .get_mut()
+            .iter_mut()
+            .find(|document| document.uri == params.text_document_position_params.text_document.uri)
+            .unwrap()
+            .clone();
+
+        let pos = document
+            .text
+            .lsp_pos_to_pos(&params.text_document_position_params.position)
+            .unwrap();
+
+        match find_translation_key_by_position(&document.text, &pos) {
+            Some(translation_key) => {
+                let mut definitions = self.definitions.lock().unwrap();
+
+                let found_definitions = definitions
+                    .get_mut()
+                    .iter()
+                    .filter(|definition| **definition == translation_key.as_str().to_string());
+
+                let locations = found_definitions
+                    .map(|definition| {
+                        let source = definition.source.clone().unwrap();
+
+                        let key_range = document
+                            .text
+                            .offset_range_to_range(translation_key.range())
+                            .unwrap();
+
+                        let origin_selection = tower_lsp::lsp_types::Range::new(
+                            document.text.pos_to_lsp_pos(&key_range.start).unwrap(),
+                            document.text.pos_to_lsp_pos(&key_range.end).unwrap(),
+                        );
+
+                        LocationLink {
+                            origin_selection_range: Some(origin_selection),
+                            target_uri: Url::from_file_path(source.path).unwrap(),
+                            // TODO: Properly convert TreeSitter range to lsp_types Range using impl
+                            // TODO: Character position is incorrect for special character strings.
+                            target_range: tower_lsp::lsp_types::Range {
+                                start: Position {
+                                    line: source.range.start_point.row as u32,
+                                    character: source.range.start_point.column as u32,
+                                },
+                                end: Position {
+                                    line: source.range.end_point.row as u32,
+                                    character: source.range.end_point.column as u32,
+                                },
+                            },
+                            target_selection_range: tower_lsp::lsp_types::Range {
+                                start: Position {
+                                    line: source.range.start_point.row as u32,
+                                    character: source.range.start_point.column as u32,
+                                },
+                                end: Position {
+                                    line: source.range.end_point.row as u32,
+                                    character: source.range.end_point.column as u32,
+                                },
+                            },
+                        }
+                    })
+                    .collect();
+
+                Ok(Some(GotoDefinitionResponse::Link(locations)))
+            }
+            None => Ok(None),
+        }
+    }
 }
 
 #[tokio::main]
@@ -672,16 +756,17 @@ async fn main() {
 }
 
 #[derive(Debug, Clone)]
-struct DefinitionSource {
-    path: PathBuf,
-    language: Option<String>,
+pub struct DefinitionSource {
+    pub path: PathBuf,
+    range: tree_sitter::Range,
+    pub language: Option<String>,
 }
 
 #[derive(Default, Debug)]
 pub struct Definition {
     key: String,
     cleaned_key: Option<String>,
-    file: Option<DefinitionSource>,
+    source: Option<DefinitionSource>,
     language: Option<String>,
     value: String,
 }
@@ -714,7 +799,7 @@ impl Definition {
         return self
             .language
             .as_ref()
-            .or(self.file.as_ref().and_then(|file| file.language.as_ref()));
+            .or(self.source.as_ref().and_then(|file| file.language.as_ref()));
     }
 
     /// Returns a flag emoji based on the supplied `language`

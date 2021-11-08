@@ -1,6 +1,7 @@
 use std::ops::Range;
+use std::path::Path;
 
-use crate::{Definition, ExtensionConfig};
+use crate::{Definition, DefinitionSource, ExtensionConfig};
 use tree_sitter::{Language, Node, Parser, Query, QueryCursor};
 
 extern "C" {
@@ -29,6 +30,7 @@ pub fn parse_translation_structure(
     config: &ExtensionConfig,
     language: Language,
     query_source: &str,
+    file_path: &Path,
 ) -> Option<Vec<Definition>> {
     let mut parser = Parser::new();
 
@@ -53,7 +55,11 @@ pub fn parse_translation_structure(
                 definitions.push(Definition {
                     key: path.clone(),
                     cleaned_key: get_cleaned_key_for_path(&path, config),
-                    file: None,
+                    source: Some(DefinitionSource {
+                        path: file_path.to_path_buf(),
+                        range: capture.node.range(),
+                        language: None,
+                    }),
                     language: get_language_for_path(&path, config),
                     value: text[capture.node.byte_range()].to_string(),
                 })
