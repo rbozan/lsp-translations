@@ -1,17 +1,19 @@
 use std::ops::Range;
 
 use crate::{Definition, ExtensionConfig};
-use tree_sitter::{Language, Node, Parser, Query, QueryCursor};
+use tree_sitter::{Language, Node, Parser, Query, QueryCursor, QueryMatches};
 
 extern "C" {
     fn tree_sitter_json() -> Language;
     fn tree_sitter_yaml() -> Language;
+    fn tree_sitter_php() -> Language;
 }
 
 pub fn get_language_by_extension(ext: &str) -> Option<Language> {
     match ext {
         "json" => Some(unsafe { tree_sitter_json() }),
         "yaml" | "yml" => Some(unsafe { tree_sitter_yaml() }),
+        "php" => Some(unsafe { tree_sitter_php() }),
         _ => None,
     }
 }
@@ -20,6 +22,7 @@ pub fn get_query_source_by_language(ext: &str) -> Option<&str> {
     match ext {
         "json" => Some(include_str!("./queries/json.scm")),
         "yaml" | "yml" => Some(include_str!("./queries/yaml.scm")),
+        "php" => Some(include_str!("./queries/php.scm")),
         _ => None,
     }
 }
@@ -43,23 +46,46 @@ pub fn parse_translation_structure(
     // Execute matches
     let mut definitions = vec![];
 
-    for m in query_cursor.matches(&query, tree.root_node(), text.as_bytes()) {
+    let matches = query_cursor.matches(&query, tree.root_node(), text.as_bytes());
+    for m in matches {
+        let mut translation_group: Option<Node> = None;
+        let mut translation_key = "";
+        let mut translation_value = "";
+
         for capture in m.captures {
             let capture_name = &query.capture_names()[capture.index as usize];
 
-            if capture_name == "translation_value" {
-                let path = get_path_for_node(capture.node, &text);
+            if capture_name == "translation_key" {
+                translation_key = &text[capture.node.byte_range()];
+            } else if capture_name == "translation_value" {
+                translation_value = &text[capture.node.byte_range()];
+            } else if capture_name == "translation_group" {
+                translation_group = Some(capture.node);
+            } else if capture_name == "translation_error" {
+                eprintln!("Found an error in the translation file");
+                return None;
+            }
+
+            if (!translation_key.is_empty()
+                && !translation_value.is_empty()
+                && translation_group.is_some())
+            {
+                /*  let path = get_path_for_node(capture.node, &text);*/
+
+                let group_path = get_path_for_node(translation_group.unwrap(), &text);
+                // let path = format!("{}.{}", group_path, translation_key);
+                let path = group_path;
 
                 definitions.push(Definition {
                     key: path.clone(),
                     cleaned_key: get_cleaned_key_for_path(&path, config),
                     file: None,
                     language: get_language_for_path(&path, config),
-                    value: text[capture.node.byte_range()].to_string(),
-                })
-            } else if capture_name == "translation_error" {
-                eprintln!("Found an error in the translation file");
-                return None;
+                    value: translation_value.to_string(),
+                });
+
+                translation_key = "";
+                translation_value = "";
             }
         }
     }
@@ -67,6 +93,7 @@ pub fn parse_translation_structure(
     Some(definitions)
 }
 
+/// Recursively goes through a node to fetch the path
 fn get_path_for_node(initial_node: Node, text: &String) -> String {
     let mut cursor = initial_node.walk();
     let mut path = String::new();
