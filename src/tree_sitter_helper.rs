@@ -48,9 +48,9 @@ pub fn parse_translation_structure(
 
     let matches = query_cursor.matches(&query, tree.root_node(), text.as_bytes());
     for m in matches {
-        let mut translation_group: Option<Node> = None;
         let mut translation_key = "";
-        let mut translation_value = "";
+        let mut translation_value: Option<Node> = None;
+        let mut translation_group: Option<Node> = None;
 
         for capture in m.captures {
             let capture_name = &query.capture_names()[capture.index as usize];
@@ -58,7 +58,7 @@ pub fn parse_translation_structure(
             if capture_name == "translation_key" {
                 translation_key = &text[capture.node.byte_range()];
             } else if capture_name == "translation_value" {
-                translation_value = &text[capture.node.byte_range()];
+                translation_value = Some(capture.node);
             } else if capture_name == "translation_group" {
                 translation_group = Some(capture.node);
             } else if capture_name == "translation_error" {
@@ -66,26 +66,37 @@ pub fn parse_translation_structure(
                 return None;
             }
 
-            if (!translation_key.is_empty()
-                && !translation_value.is_empty()
-                && translation_group.is_some())
+            if !translation_key.is_empty()
+                && translation_value.is_some()
+                && translation_group.is_some()
             {
-                /*  let path = get_path_for_node(capture.node, &text);*/
+                let group_path = get_path_for_node(translation_value.unwrap(), &text);
 
-                let group_path = get_path_for_node(translation_group.unwrap(), &text);
-                // let path = format!("{}.{}", group_path, translation_key);
-                let path = group_path;
+                let path = if !group_path.is_empty() {
+                    group_path
+                } else {
+                    translation_key
+                        .trim_matches('\'')
+                        .trim_matches('"')
+                        .to_string()
+                };
+
+                let translation_value_string = text[translation_value.unwrap().byte_range()]
+                    .trim_matches('\'')
+                    .trim_matches('"')
+                    .to_string();
 
                 definitions.push(Definition {
                     key: path.clone(),
                     cleaned_key: get_cleaned_key_for_path(&path, config),
                     file: None,
                     language: get_language_for_path(&path, config),
-                    value: translation_value.to_string(),
+                    value: translation_value_string,
                 });
 
+                translation_group = None;
                 translation_key = "";
-                translation_value = "";
+                translation_value = None;
             }
         }
     }
