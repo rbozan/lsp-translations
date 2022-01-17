@@ -10,6 +10,10 @@ mod tests_completion;
 #[cfg(test)]
 mod tests_completion_yml;
 
+#[path = "./tests/completion_php.rs"]
+#[cfg(test)]
+mod tests_completion_php;
+
 #[path = "./tests/completion_multiple.rs"]
 #[cfg(test)]
 mod tests_completion_multiple;
