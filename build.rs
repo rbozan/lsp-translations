@@ -34,7 +34,6 @@ fn build_yaml() {
         .flag_if_supported("-Wno-unused-parameter")
         .flag_if_supported("-Wno-unused-but-set-variable")
         .flag_if_supported("-O")
-        .flag_if_supported("-std=c++11")
         .file(yaml_dir.join("scanner.cc"))
         .compile("tree-sitter-yaml-scanner");
 }
