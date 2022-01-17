@@ -12,6 +12,9 @@ use futures::select;
 use futures::{FutureExt, StreamExt};
 use std::env;
 
+#[cfg(test)]
+use pretty_assertions::assert_eq;
+
 lazy_static! {
     static ref INITIALIZE_REQUEST: Incoming = serde_json::from_str(
         r#"{"jsonrpc":"2.0","method":"initialize","params":{"capabilities":{}},"id":1}"#

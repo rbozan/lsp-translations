@@ -2,10 +2,13 @@ use super::*;
 
 #[test]
 fn converts_en_to_us_flag() {
+    let mut extra_data = HashMap::<String, String>::new();
+    extra_data.insert("language".to_string(), "en".to_string());
+
     let definition = Definition {
         key: "en.test_key".to_string(),
         cleaned_key: Some("test_key".to_string()),
-        language: Some("en".to_string()),
+        extra_data,
         value: "some value".to_string(),
         ..Default::default()
     };
@@ -15,10 +18,13 @@ fn converts_en_to_us_flag() {
 
 #[test]
 fn printable_value_escapes_newlines() {
+    let mut extra_data = HashMap::<String, String>::new();
+    extra_data.insert("language".to_string(), "en".to_string());
+
     let definition = Definition {
         key: "en.test_key".to_string(),
         cleaned_key: Some("test_key".to_string()),
-        language: Some("en".to_string()),
+        extra_data,
         value: "\nSome value with multiple\nnewlines".to_string(),
         ..Default::default()
     };
@@ -31,10 +37,13 @@ fn printable_value_escapes_newlines() {
 
 #[test]
 fn printable_value_escapes_vertical_line() {
+    let mut extra_data = HashMap::<String, String>::new();
+    extra_data.insert("language".to_string(), "en".to_string());
+
     let definition = Definition {
         key: "en.test_key".to_string(),
         cleaned_key: Some("test_key".to_string()),
-        language: Some("en".to_string()),
+        extra_data,
         value: "Abc|defg".to_string(),
         ..Default::default()
     };

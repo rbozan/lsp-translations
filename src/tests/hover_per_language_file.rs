@@ -3,7 +3,8 @@ use tower_lsp::jsonrpc::{Incoming, Outgoing};
 mod helpers;
 use helpers::*;
 
-// use helpers;
+#[cfg(test)]
+use pretty_assertions::assert_eq;
 
 lazy_static! {
     static ref DID_OPEN_REQUEST: Incoming = serde_json::from_str(
@@ -66,7 +67,7 @@ lazy_static! {
 {
    "jsonrpc":"2.0",
    "result":{
-      "contents":"flag|language|translation\n-|-|-\n🇳🇱|**nl**|Nederlands\n🇺🇸|**en**|English",
+      "contents":"|flag|language|translation|\n|-|-|-|\n|🇳🇱|**nl**|Nederlands\n🇺🇸|**en**|English|",
       "range":{
          "end":{
             "character": 15,
@@ -115,7 +116,7 @@ lazy_static! {
 {
    "jsonrpc":"2.0",
    "result":{
-      "contents": "|translation|\n|-\n|Nederlands\n|English",
+      "contents": "|translation|\n|-|\n|Nederlands\nEnglish|",
       "range":{
          "end":{
             "character": 15,

@@ -47,7 +47,8 @@ use lsp_document::{IndexedText, TextAdapter, TextMap};
 mod string_helper;
 use crate::string_helper::find_translation_key_by_position;
 use country_emoji::flag;
-
+use std::collections::HashMap;
+use std::convert::TryInto;
 use std::path::Path;
 use string_helper::get_editing_range;
 use string_helper::TRANSLATION_BEGIN_CHARS;
@@ -267,19 +268,17 @@ impl Backend {
                         .translation_files
                         .include
                         .iter()
-                        .map(|pattern| {
-                            FileSystemWatcher {
-                                glob_pattern: path_clean::clean(
-                                    folder
-                                        .uri
-                                        .to_file_path()
-                                        .unwrap()
-                                        .join(PathBuf::from(pattern))
-                                        .to_str()
-                                        .unwrap(),
-                                ),
-                                kind: None,
-                            }
+                        .map(|pattern| FileSystemWatcher {
+                            glob_pattern: path_clean::clean(
+                                folder
+                                    .uri
+                                    .to_file_path()
+                                    .unwrap()
+                                    .join(PathBuf::from(pattern))
+                                    .to_str()
+                                    .unwrap(),
+                            ),
+                            kind: None,
                         })
                         .collect::<Vec<FileSystemWatcher>>()
                 })
@@ -340,7 +339,10 @@ impl Backend {
         match new_definitions_result {
             Some(mut new_definitions) => {
                 // Use file regex language for all above definitions
-                let language = self
+                let mut extra_data = HashMap::<String, String>::new();
+
+                // Use file regex language for all above definitions
+                if let Some(file_name_details_regex) = self
                     .config
                     .lock()
                     .unwrap()
@@ -348,18 +350,26 @@ impl Backend {
                     .file_name
                     .details
                     .as_ref()
-                    .and_then(|file_name_details_regex| {
-                        file_name_details_regex
-                            .captures(path.file_name().unwrap().to_str().unwrap())
-                            .and_then(|cap| {
-                                cap.name("language")
-                                    .map(|matches| matches.as_str().to_string())
-                            })
-                    });
+                {
+                    if let Some(cap) =
+                        file_name_details_regex.captures(path.file_name().unwrap().to_str().unwrap())
+                    {
+                        for capture_group_name in file_name_details_regex.capture_names().flatten() {
+                            let capture_group_result = cap.name(capture_group_name);
+        
+                            if capture_group_result.is_some() {
+                                extra_data.insert(
+                                    capture_group_name.to_string(),
+                                    capture_group_result.unwrap().as_str().to_string(),
+                                );
+                            }
+                        }
+                    };
+                };
 
                 let translation_file = DefinitionSource {
                     path: path.to_path_buf(),
-                    language,
+                    extra_data,
                 };
 
                 for definition in new_definitions.iter_mut() {
@@ -396,29 +406,72 @@ impl Backend {
                 .clone()
                 .any(|definition| definition.get_flag().is_some());
 
+            let extra_data_keys: Vec<&String> = definitions_same_key
+                .clone()
+                .flat_map(|definition| {
+                    [
+                        definition
+                            .extra_data
+                            .keys()
+                            .into_iter()
+                            .collect::<Vec<&String>>(),
+                        definition.file.as_ref().map_or([].into(), |file| {
+                            file.extra_data.keys().into_iter().collect()
+                        }),
+                    ]
+                })
+                .flatten()
+                .filter(|key| *key != &"language".to_string())
+                .unique()
+                .collect();
+
+            let mut table_headers = Vec::new();
+            if has_flag || has_language {
+                table_headers.push("flag");
+                table_headers.push("language");
+            }
+
+            extra_data_keys.iter().for_each(|data_key| {
+                table_headers.push(&data_key);
+            });
+
+            table_headers.push("translation");
+
             let body = definitions_same_key
                 .map(|def| {
+                    let mut row_data = Vec::<String>::new();
                     if has_flag || has_language {
-                        let row_data = vec![
-                            def.get_flag().unwrap_or("🏴󠁢󠁳󠁢󠁰󠁿".to_string()),
-                            format!("**{}**", def.get_language().unwrap_or(&"".to_string())),
-                            def.get_printable_value(),
-                        ];
+                        row_data.push(def.get_flag().unwrap_or("🏴󠁢󠁳󠁢󠁰󠁿".to_string()));
 
-                        row_data.join("|")
-                    } else {
-                        format!("|{}", def.get_printable_value())
+                        row_data.push(format!(
+                            "**{}**",
+                            def.get_language().unwrap_or(&"-".to_string())
+                        ));
                     }
+
+                    extra_data_keys.iter().for_each(|data_key| {
+                        row_data.push(
+                            def.get_full_extra_data(*data_key)
+                                .unwrap_or(&"-".to_string())
+                                .to_string(),
+                        );
+                    });
+
+                    row_data.push(def.get_printable_value());
+
+                    row_data.join("|")
                 })
                 .intersperse("\n".to_string())
                 .collect::<String>();
 
-            let header = if has_flag || has_language {
-                "flag|language|translation\n-|-|-"
-            } else {
-                "|translation|\n|-"
-            };
-            return Some(format!("{}\n{}", header, body));
+            let table_separators: String = table_headers.iter().map(|_| "-").join("|");
+
+            return Some(format!(
+                "|{}|\n|{}|\n|{}|",
+                table_headers.join("|"),
+                table_separators,
+                body
+            ));
         }
         None
     }
@@ -679,7 +732,7 @@ async fn main() {
 #[derive(Debug, Clone)]
 struct DefinitionSource {
     path: PathBuf,
-    language: Option<String>,
+    extra_data: HashMap<String, String>,
 }
 
 #[derive(Default, Debug)]
@@ -687,8 +740,8 @@ pub struct Definition {
     key: String,
     cleaned_key: Option<String>,
     file: Option<DefinitionSource>,
-    language: Option<String>,
     value: String,
+    extra_data: HashMap<String, String>,
 }
 
 impl PartialEq for Definition {
@@ -715,11 +768,14 @@ impl Definition {
         self.cleaned_key.as_ref().unwrap_or(&self.key)
     }
 
+    fn get_full_extra_data(&self, key: &str) -> Option<&String> {
+        self.extra_data
+            .get(key)
+            .or(self.file.as_ref().and_then(|file| file.extra_data.get(key)))
+    }
+
     fn get_language(&self) -> Option<&String> {
-        return self
-            .language
-            .as_ref()
-            .or(self.file.as_ref().and_then(|file| file.language.as_ref()));
+        self.get_full_extra_data("language")
     }
 
     /// Returns a flag emoji based on the supplied `language`
