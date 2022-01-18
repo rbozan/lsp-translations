@@ -1,4 +1,5 @@
 use std::ops::Range;
+use std::collections::HashMap;
 
 use crate::{Definition, ExtensionConfig};
 use tree_sitter::{Language, Node, Parser, Query, QueryCursor, QueryMatches};
@@ -90,7 +91,7 @@ pub fn parse_translation_structure(
                     key: path.clone(),
                     cleaned_key: get_cleaned_key_for_path(&path, config),
                     file: None,
-                    language: get_language_for_path(&path, config),
+                    extra_data: get_extra_data_for_path(&path, config),
                     value: translation_value_string,
                 });
 
@@ -199,6 +200,30 @@ fn get_cleaned_key_for_path(path: &String, config: &ExtensionConfig) -> Option<S
             .captures(&path.replace("\n", ""))
             .and_then(|cap| cap.get(1).map(|group| group.as_str().to_string()))
     })
+}
+
+fn get_extra_data_for_path(
+    path: &String,
+    config: &ExtensionConfig,
+) -> HashMap<String, String> {
+    let mut extra_data = HashMap::<String, String>::new();
+
+    if let Some(key_details_regex) = config.key.details.as_ref() {
+        if let Some(cap) = key_details_regex.captures(&path) {
+            for capture_group_name in key_details_regex.capture_names().flatten() {
+                let capture_group_result = cap.name(capture_group_name);
+
+                if capture_group_result.is_some() {
+                    extra_data.insert(
+                        capture_group_name.to_string(),
+                        capture_group_result.unwrap().as_str().to_string(),
+                    );
+                }
+            }
+        }
+    };
+
+    extra_data
 }
 
 fn get_language_for_path(path: &String, config: &ExtensionConfig) -> Option<String> {

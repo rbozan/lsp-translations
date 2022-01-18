@@ -3,7 +3,8 @@ use tower_lsp::jsonrpc::{Incoming, Outgoing, Response};
 mod helpers;
 use helpers::*;
 
-// use helpers;
+#[cfg(test)]
+use pretty_assertions::assert_eq;
 
 lazy_static! {
     static ref DID_OPEN_REQUEST: Incoming = serde_json::from_str(
@@ -47,7 +48,7 @@ lazy_static! {
 {
    "jsonrpc":"2.0",
    "result":{
-      "contents":"flag|language|translation\n-|-|-\n🇺🇸|**en-us**|This title will appear in the header.",
+      "contents":"|flag|language|translation|\n|-|-|-|\n|🇺🇸|**en-us**|This title will appear in the header.|",
       "range":{
          "end":{
             "character":28,
@@ -100,7 +101,7 @@ lazy_static! {
             ]
         },
         "fileName": {
-            "details": "testdsddasdasdddsad"
+            "details": "invalid-details-regex"
         },
         "key": {
             "filter": "^.+?\\..+?\\.(.+$)"
@@ -119,7 +120,7 @@ lazy_static! {
 {
    "jsonrpc":"2.0",
    "result":{
-      "contents": "|translation|\n|-\n|This title will appear in the header.",
+      "contents": "|translation|\n|-|\n|This title will appear in the header.|",
       "range":{
          "end":{
             "character":28,
@@ -137,6 +138,56 @@ lazy_static! {
         )
         .unwrap()
     );
+
+    static ref WORKSPACE_CONFIGURATION_REQUEST_WITH_CUSTOM_DATA : Incoming = serde_json::from_str(
+        r#"{"jsonrpc":"2.0","result": [
+    {
+        "translationFiles": {
+            "include": [
+                "./fixtures/*.json",
+                ".\\fixtures\\*.json"
+            ]
+        },
+        "fileName": {
+            "details": "^.+?\\.(?P<extension>.*?)$"
+        },
+        "key": {
+            "filter": "^.+?\\..+?\\.(.+$)"
+        },
+        "trace": {
+            "server": "verbose"
+        }
+    }
+], "id": 1 }"#
+    )
+    .unwrap();
+
+
+        static ref HOVER_RESPONSE_WITH_CUSTOM_DATA: Outgoing = Outgoing::Response(
+        serde_json::from_str(
+            r#"
+{
+   "jsonrpc":"2.0",
+   "result":{
+      "contents": "|extension|translation|\n|-|-|\n|json|This title will appear in the header.|",
+      "range":{
+         "end":{
+            "character":28,
+            "line":0
+         },
+         "start":{
+            "character":11,
+            "line":0
+         }
+      }
+   },
+   "id":1
+}
+"#
+        )
+        .unwrap()
+    );
+
 
 
 }
@@ -181,5 +232,19 @@ async fn hover_without_flag_and_language() {
     assert_eq!(
         service.call(HOVER_REQUEST.clone()).await,
         Ok(Some(HOVER_RESPONSE_WITHOUT_LANGUAGE.clone()))
+    );
+}
+
+#[tokio::test]
+#[timeout(500)]
+async fn hover_with_custom_data() {
+    let (mut service, _) =
+        prepare_with_workspace_config(&WORKSPACE_CONFIGURATION_REQUEST_WITH_CUSTOM_DATA).await;
+
+    assert_eq!(service.call(DID_OPEN_REQUEST.clone()).await, Ok(None));
+
+    assert_eq!(
+        service.call(HOVER_REQUEST.clone()).await,
+        Ok(Some(HOVER_RESPONSE_WITH_CUSTOM_DATA.clone()))
     );
 }
