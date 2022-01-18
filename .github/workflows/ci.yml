@@ -8,16 +8,24 @@ jobs:
       matrix:
         target:
           [
-            x86_64-unknown-linux-musl,
+            x86_64-unknown-linux-gnu,
             x86_64-apple-darwin,
             x86_64-pc-windows-gnu,
           ]
         include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+
+          - target: x86_64-pc-windows-gnu
+            os: windows-2022
+
           - target: x86_64-apple-darwin
             os: macos-latest
 
     steps:
       - uses: actions/checkout@v2
+        with:
+          submodules: true
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
@@ -70,6 +78,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v2
+        with:
+          submodules: true
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
@@ -93,8 +103,8 @@ jobs:
       # Build with fancy params via https://github.com/shepmaster/rust/blob/silicon/silicon/README.md
       - if: matrix.target == 'aarch64-apple-darwin'
         run: |
-          SDKROOT=$(xcrun -sdk macosx11.1 --show-sdk-path)
-          MACOSX_DEPLOYMENT_TARGET=$(xcrun -sdk macosx11.1 --show-sdk-platform-version)
+          SDKROOT=$(xcrun --show-sdk-path)
+          MACOSX_DEPLOYMENT_TARGET=$(xcrun --show-sdk-platform-version)
 
       - name: Build
         uses: actions-rs/cargo@v1
@@ -130,7 +140,7 @@ jobs:
         uses: hennejg/github-tag-action@v4.3.1
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          tag_prefix: ''
+          tag_prefix: ""
           release_branches: master
       - name: Download artifacts
         uses: actions/download-artifact@v2

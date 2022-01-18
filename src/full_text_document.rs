@@ -1,4 +1,4 @@
-use lsp_document::{TextMap, TextAdapter, Pos, IndexedText};
+use lsp_document::IndexedText;
 use tower_lsp::lsp_types::Url;
 
 #[derive(Clone)]

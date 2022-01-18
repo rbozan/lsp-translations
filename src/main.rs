@@ -10,6 +10,10 @@ mod tests_completion;
 #[cfg(test)]
 mod tests_completion_yml;
 
+#[path = "./tests/completion_php.rs"]
+#[cfg(test)]
+mod tests_completion_php;
+
 #[path = "./tests/completion_multiple.rs"]
 #[cfg(test)]
 mod tests_completion_multiple;
@@ -38,16 +42,18 @@ mod full_text_document;
 use crate::full_text_document::FullTextDocument;
 
 use lsp_document::apply_change;
-use lsp_document::{IndexedText, Pos, TextAdapter, TextMap};
+use lsp_document::{IndexedText, TextAdapter, TextMap};
 
 mod string_helper;
 use crate::string_helper::find_translation_key_by_position;
 use country_emoji::flag;
-use std::convert::TryInto;
+
 use std::path::Path;
 use string_helper::get_editing_range;
 use string_helper::TRANSLATION_BEGIN_CHARS;
 use string_helper::TRANSLATION_KEY_DIVIDER;
+
+mod tree_sitter_helper;
 
 use serde_json::json;
 use serde_json::Value;
@@ -58,12 +64,15 @@ use tower_lsp::{Client, LanguageServer, LspService, Server};
 use glob::glob;
 use serde::Deserialize;
 use std::cell::Cell;
-use std::fs::File;
-use std::io::BufReader;
+
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
+use std::fs;
+
 use itertools::Itertools;
+
+use std::time::Instant;
 
 #[macro_use]
 extern crate derive_new;
@@ -160,7 +169,7 @@ struct KeyConfig {
 
 #[derive(Deserialize, Debug, Default, Clone)]
 #[serde(rename_all = "camelCase")]
-struct ExtensionConfig {
+pub struct ExtensionConfig {
     translation_files: TranslationFilesConfig,
     file_name: FileNameConfig,
     #[serde(default)]
@@ -204,7 +213,7 @@ impl Backend {
         let folders = self.client.workspace_folders().await.unwrap().unwrap();
 
         self.client
-            .log_message(MessageType::Info, format!("folders: {:?}", folders))
+            .log_message(MessageType::Info, format!("Workspace folders: {:?}", folders))
             .await;
 
         let files: Vec<PathBuf> = self
@@ -304,135 +313,66 @@ impl Backend {
 
     /// Reads the translations from a single file and adds them to the `definitions`
     fn read_translation(&self, path: &Path) -> Result<(), Box<dyn std::error::Error>> {
-        let file = File::open(path)?;
-        let reader = BufReader::new(file);
+        let file = fs::read_to_string(path)?;
+
         let ext = path.extension().and_then(OsStr::to_str);
-
-        let value = match ext {
-            Some("json") => serde_json::from_reader(reader)?,
-            Some("yaml") | Some("yml") => serde_yaml::from_reader(reader)?,
-            _ => Value::Null,
+        if ext.is_none() {
+            return Err(Box::new(InvalidTranslationFileStructure));
         };
 
-        let mut new_definitions = self.parse_translation_structure(&value, "".to_string())?;
-
-        // Use file regex language for all above definitions
-        let language = self
-            .config
-            .lock()
-            .unwrap()
-            .get_mut()
-            .file_name
-            .details
-            .as_ref()
-            .and_then(|file_name_details_regex| {
-                file_name_details_regex
-                    .captures(path.file_name().unwrap().to_str().unwrap())
-                    .and_then(|cap| {
-                        cap.name("language")
-                            .map(|matches| matches.as_str().to_string())
-                    })
-            });
-
-        let translation_file = TranslationFile {
-            path: path.to_path_buf(),
-            language,
-        };
-
-        for definition in new_definitions.iter_mut() {
-            definition.file = Some(translation_file.clone());
+        let language = tree_sitter_helper::get_language_by_extension(ext.unwrap());
+        if language.is_none() {
+            return Err(Box::new(InvalidTranslationFileStructure));
         }
 
-        let mut definitions = self.definitions.lock().unwrap();
-        new_definitions.append(definitions.get_mut());
-        definitions.set(new_definitions);
+        let query_source = tree_sitter_helper::get_query_source_by_language(ext.unwrap());
+        if query_source.is_none() {
+            return Err(Box::new(InvalidTranslationFileStructure));
+        }
 
-        Ok(())
-    }
+        let new_definitions_result = tree_sitter_helper::parse_translation_structure(
+            file,
+            self.config.lock().unwrap().get_mut(),
+            language.unwrap(),
+            query_source.unwrap(),
+        );
 
-    /// Recursively goes through all the keys and convert them to `Vec<Definition>`
-    fn parse_translation_structure(
-        &self,
-        value: &Value,
-        json_path: String,
-    ) -> Result<Vec<Definition>, InvalidTranslationFileStructure> {
-        let mut definitions = vec![];
-
-        let result: Result<(), InvalidTranslationFileStructure> =
-            match value {
-                Value::Object(values) => {
-                    for (key, value) in values.iter() {
-                        definitions.append(&mut self.parse_translation_structure(
-                            value,
-                            format!(
-                                "{}{}{}",
-                                json_path,
-                                if !json_path.is_empty() { "." } else { "" },
-                                key
-                            ),
-                        )?);
-                    }
-
-                    Ok(())
-                }
-
-                Value::Array(values) => {
-                    for (key, value) in values.iter().enumerate() {
-                        definitions.append(&mut self.parse_translation_structure(
-                            value,
-                            format!("{}[{}]", json_path, key),
-                        )?);
-                    }
-
-                    Ok(())
-                }
-                Value::String(value) => {
-                    let cleaned_key = self
-                        .config
-                        .lock()
-                        .unwrap()
-                        .get_mut()
-                        .key
-                        .filter
-                        .as_ref()
-                        .and_then(|key_filter_regex| {
-                            key_filter_regex
-                                .captures(&json_path.replace("\n", ""))
-                                .and_then(|cap| cap.get(1).map(|group| group.as_str().to_string()))
-                        });
-
-                    let language = &self
-                        .config
-                        .lock()
-                        .unwrap()
-                        .get_mut()
-                        .key
-                        .details
-                        .as_ref()
-                        .and_then(|key_details_regex| {
-                            key_details_regex.captures(&json_path).and_then(|cap| {
+        match new_definitions_result {
+            Some(mut new_definitions) => {
+                // Use file regex language for all above definitions
+                let language = self
+                    .config
+                    .lock()
+                    .unwrap()
+                    .get_mut()
+                    .file_name
+                    .details
+                    .as_ref()
+                    .and_then(|file_name_details_regex| {
+                        file_name_details_regex
+                            .captures(path.file_name().unwrap().to_str().unwrap())
+                            .and_then(|cap| {
                                 cap.name("language")
                                     .map(|matches| matches.as_str().to_string())
                             })
-                        });
-
-                    // key_filter_regex.captures_iter(&json_path).intersperse(".").collect();
-                    definitions.push(Definition {
-                        key: json_path,
-                        cleaned_key,
-                        value: value.to_string(),
-                        language: language.clone(),
-                        ..Default::default()
                     });
 
-                    Ok(())
-                }
-                _ => Err(InvalidTranslationFileStructure),
-            };
+                let translation_file = DefinitionSource {
+                    path: path.to_path_buf(),
+                    language,
+                };
 
-        match result {
-            Ok(()) => Ok(definitions),
-            Err(err) => Err(err),
+                for definition in new_definitions.iter_mut() {
+                    definition.file = Some(translation_file.clone());
+                }
+
+                let mut definitions = self.definitions.lock().unwrap();
+                new_definitions.append(definitions.get_mut());
+                definitions.set(new_definitions);
+
+                Ok(())
+            }
+            None => Err(Box::new(InvalidTranslationFileStructure)),
         }
     }
 
@@ -495,17 +435,16 @@ impl Backend {
 
         match config {
             Ok(config) => {
-                self.client
-                    .log_message(MessageType::Log, format!("config received {:?}", config))
-                    .await;
+                let now = Instant::now();
 
                 self.fetch_translations(config[0].clone()).await;
                 self.client
                     .log_message(
                         MessageType::Info,
                         format!(
-                            "Loaded {:} definitions",
-                            self.definitions.lock().unwrap().get_mut().len()
+                            "Loaded {:} definitions in {:#?}",
+                            self.definitions.lock().unwrap().get_mut().len(),
+                            now.elapsed()
                         ),
                     )
                     .await;
@@ -562,37 +501,21 @@ impl LanguageServer for Backend {
     }
 
     async fn did_change_workspace_folders(&self, _: DidChangeWorkspaceFoldersParams) {
-        self.client
-            .log_message(MessageType::Info, "workspace folders changed!")
-            .await;
-
         // TODO: Do not refetch configuration
         self.read_config().await;
     }
 
     async fn did_change_configuration(&self, _: DidChangeConfigurationParams) {
-        self.client
-            .log_message(MessageType::Info, "configuration changed!")
-            .await;
-
         // TODO: Do not refetch configuration but use params
         self.read_config().await;
     }
 
     async fn did_change_watched_files(&self, _: DidChangeWatchedFilesParams) {
-        self.client
-            .log_message(MessageType::Info, "watched files have changed!")
-            .await;
-
         // TODO: Do not refetch configuration but use params
         self.read_config().await;
     }
 
     async fn did_open(&self, params: DidOpenTextDocumentParams) {
-        self.client
-            .log_message(MessageType::Info, "file opened!")
-            .await;
-
         self.documents
             .lock()
             .unwrap()
@@ -623,10 +546,6 @@ impl LanguageServer for Backend {
     }
 
     async fn did_close(&self, params: DidCloseTextDocumentParams) {
-        self.client
-            .log_message(MessageType::Info, "file closed!")
-            .await;
-
         self.documents
             .lock()
             .unwrap()
@@ -638,7 +557,7 @@ impl LanguageServer for Backend {
         &self,
         params: CompletionParams,
     ) -> jsonrpc::Result<Option<CompletionResponse>> {
-        let mut document = self
+        let document = self
             .documents
             .lock()
             .unwrap()
@@ -654,7 +573,7 @@ impl LanguageServer for Backend {
             .unwrap();
 
         let range_result = get_editing_range(&document.text, &pos);
-        if !range_result.is_some() {
+        if range_result.is_none() {
             return Ok(None);
         };
 
@@ -686,7 +605,6 @@ impl LanguageServer for Backend {
                     .collect(),
             )))
         } else {
-            eprintln!("Gaat fout");
             Err(Error::internal_error())
         }
     }
@@ -704,7 +622,7 @@ impl LanguageServer for Backend {
     }
 
     async fn hover(&self, params: HoverParams) -> jsonrpc::Result<Option<Hover>> {
-        let mut document = self
+        let document = self
             .documents
             .lock()
             .unwrap()
@@ -759,16 +677,16 @@ async fn main() {
 }
 
 #[derive(Debug, Clone)]
-struct TranslationFile {
+struct DefinitionSource {
     path: PathBuf,
     language: Option<String>,
 }
 
 #[derive(Default, Debug)]
-struct Definition {
+pub struct Definition {
     key: String,
     cleaned_key: Option<String>,
-    file: Option<TranslationFile>,
+    file: Option<DefinitionSource>,
     language: Option<String>,
     value: String,
 }

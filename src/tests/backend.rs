@@ -8,9 +8,6 @@ use std::env;
 mod helpers;
 use helpers::*;
 
-use futures::select;
-use futures::FutureExt;
-
 lazy_static! {
     static ref INITIALIZE_REQUEST: Incoming = serde_json::from_str(
         r#"{"jsonrpc":"2.0","method":"initialize","params":{"capabilities":{}},"id":1}"#
@@ -80,7 +77,6 @@ lazy_static! {
                 .to_str()
                 .unwrap()
                 .escape_default()
-                .to_string()
         )
         .as_str()
     )

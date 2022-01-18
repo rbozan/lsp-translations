@@ -1,4 +1,4 @@
-use tower_lsp::jsonrpc::{Incoming, Outgoing};
+use tower_lsp::jsonrpc::Incoming;
 
 mod helpers;
 use helpers::*;
@@ -23,7 +23,6 @@ lazy_static! {
         }"#
     )
     .unwrap();
-
     static ref DID_CHANGE_ADD_TEXT_REQUEST: Incoming = serde_json::from_str(
         r#"{
             "jsonrpc":"2.0",
@@ -54,7 +53,6 @@ lazy_static! {
         }"#
     )
     .unwrap();
-
     static ref DID_CHANGE_REMOVE_TEXT_REQUEST: Incoming = serde_json::from_str(
         r#"{
             "jsonrpc":"2.0",
@@ -93,6 +91,12 @@ async fn change_emoji_in_document() {
     let (mut service, _) = prepare_workspace().await;
 
     assert_eq!(service.call(DID_OPEN_REQUEST.clone()).await, Ok(None));
-    assert_eq!(service.call(DID_CHANGE_ADD_TEXT_REQUEST.clone()).await, Ok(None));
-    assert_eq!(service.call(DID_CHANGE_REMOVE_TEXT_REQUEST.clone()).await, Ok(None));
+    assert_eq!(
+        service.call(DID_CHANGE_ADD_TEXT_REQUEST.clone()).await,
+        Ok(None)
+    );
+    assert_eq!(
+        service.call(DID_CHANGE_REMOVE_TEXT_REQUEST.clone()).await,
+        Ok(None)
+    );
 }

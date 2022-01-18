@@ -17,15 +17,11 @@ lazy_static! {
     {
         "translationFiles": {
             "include": [
-                "./fixtures/*.yml"
+                "./fixtures/*.php"
             ]
         },
         "fileName": {
             "details": ""
-        },
-        "key": {
-            "details": "^.+?\\.(?P<language>.+?)\\.",
-            "filter": "^.+?\\.(.+$)"
         },
         "trace": {
             "server": "verbose"
@@ -40,8 +36,8 @@ lazy_static! {
             "method":"textDocument/didOpen",
             "params":{
                 "textDocument": {
-                    "uri": "file:///somefile.js",
-                    "languageId": "javascript",
+                    "uri": "file:///somefile.php",
+                    "languageId": "php",
                     "version": 1,
                     "text": "translate('')"
                 }
@@ -56,7 +52,7 @@ lazy_static! {
             "method":"textDocument/completion",
             "params":{
                 "textDocument": {
-                    "uri": "file:///somefile.js"
+                    "uri": "file:///somefile.php"
                 },
                 "position": {
                     "line": 0,
@@ -72,15 +68,8 @@ lazy_static! {
     .unwrap();
     static ref COMPLETION_RESPONSE: Outgoing = {
         let keys = [
-            "accounts.edit.new_password",
-            "accounts.edit.update",
-            "employees.assigned_employees.assigned_employee.main_dta",
-            "simple_form.no",
-            "simple_form.required.mark",
-            "simple_form.new_model",
-            "simple_form.confirm_registration",
-            "simple_form.date.abbr_day_names[0]",
-            "simple_form.formats.default",
+            "test-single",
+            "test-multiline",
         ];
 
         let completion_items = keys
