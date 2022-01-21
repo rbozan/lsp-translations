@@ -1,15 +1,24 @@
 use std::path::PathBuf;
 
 fn main() {
+    // println!("cargo:rustc-link-lib=static=stdc++");
+    // println!("cargo:rustc-link-lib=static-nobundle=stdc++");
+
     build_json();
     build_yaml();
     build_php();
 }
 
+fn default_cc_builder() -> cc::Build {
+    let mut build = cc::Build::new();
+    build.shared_flag(true).static_flag(true);
+    build
+}
+
 fn build_json() {
     let json_dir: PathBuf = ["tree-sitter", "tree-sitter-json", "src"].iter().collect();
 
-    cc::Build::new()
+    default_cc_builder()
         .include(&json_dir)
         .file(json_dir.join("parser.c"))
         .flag_if_supported("-O")
@@ -19,7 +28,7 @@ fn build_json() {
 fn build_yaml() {
     let yaml_dir: PathBuf = ["tree-sitter", "tree-sitter-yaml", "src"].iter().collect();
 
-    cc::Build::new()
+    default_cc_builder()
         .include(&yaml_dir)
         .flag_if_supported("-Wno-unused-parameter")
         .flag_if_supported("-Wno-unused-but-set-variable")
@@ -28,7 +37,7 @@ fn build_yaml() {
         .file(yaml_dir.join("parser.c"))
         .compile("tree-sitter-yaml");
 
-    cc::Build::new()
+    default_cc_builder()
         .cpp(true)
         .include(&yaml_dir)
         .flag_if_supported("-Wno-unused-parameter")
@@ -41,7 +50,7 @@ fn build_yaml() {
 fn build_php() {
     let php_dir: PathBuf = ["tree-sitter", "tree-sitter-php", "src"].iter().collect();
 
-    cc::Build::new()
+    default_cc_builder()
         .include(&php_dir)
         .flag_if_supported("-Wno-unused-parameter")
         .flag_if_supported("-Wno-unused-but-set-variable")
@@ -50,7 +59,7 @@ fn build_php() {
         .file(php_dir.join("parser.c"))
         .compile("tree-sitter-php");
 
-    cc::Build::new()
+    default_cc_builder()
         .cpp(true)
         .include(&php_dir)
         .flag_if_supported("-Wno-unused-parameter")
